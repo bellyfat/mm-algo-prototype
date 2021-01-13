@@ -27,7 +27,6 @@ class BybitFeed(Feed):
 
 
 class BinanceFeed(Feed):
-    queues = {'websocket_stream': mp.Queue(), 'depth_snapshot': mp.Queue()}
     _buf_depth_snapshot = None
     _buf_depth_updates = []
 
