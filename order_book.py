@@ -2,12 +2,13 @@ from typing import List, Union
 
 
 class OrderBook:
-    bids: List[list]
-    asks: List[list]
+    bids: List[List[Union[float, int]]]
+    asks: List[List[Union[float, int]]]
     BID_STR = 'BID'
     ASK_STR = 'ASK'
 
-    def __init__(self, bids: List[list], asks: List[list]) -> None:
+    def __init__(self, bids: List[List[Union[float, int]]],
+                 asks: List[List[Union[float, int]]]) -> None:
         self.bids = bids
         self.asks = asks
 
@@ -89,13 +90,15 @@ class BinanceOrderBook(OrderBook):
             asks=self.convert_response_list(values=depth_snapshot.get('asks')))
 
     @staticmethod
-    def convert_response_list(values: List[List[str]]) -> List[list]:
+    def convert_response_list(
+            values: List[List[str]]) -> List[List[Union[float, int]]]:
         converted = []
         for value in values:
             converted.append([float(value[0]), int(value[1])])
         return converted
 
-    def insert_or_update(self, side: str, level: List[list]) -> None:
+    def insert_or_update(self, side: str,
+                         level: List[Union[float, int]]) -> None:
         if side == self.BID_STR:
             for compare in self.bids:
                 if compare[0] == level[0]:
