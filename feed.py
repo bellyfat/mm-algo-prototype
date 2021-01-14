@@ -31,8 +31,8 @@ class BybitFeed(Feed):
                     self.order_book = BybitOrderBook(depth_snapshot=data)
                 else:
                     self.order_book.handle_delta(delta_message=data)
-                #print('Best Bid:', str(self.order_book.bids[0]) +
-                      #'; Best Ask:', str(self.order_book.asks[0]))
+                print('Bybit Best Bid:', str(self.order_book.bids[0][0])
+                      + '; Bybit Best Ask:', str(self.order_book.asks[0][0]))
 
 
 class BinanceFeed(Feed):
@@ -52,8 +52,9 @@ class BinanceFeed(Feed):
                     self._buf_depth_updates.append(data)
                 else:
                     self.order_book.parse_update(depth_update=data)
-                    #print('Best Bid:', str(self.order_book.bids[0]) +
-                          #'; Best Ask:', str(self.order_book.asks[0]))
+                    print('Binance Best Bid:', str(self.order_book.bids[0][0])
+                          + '; Binance Best Ask:',
+                          str(self.order_book.asks[0][0]))
         if self.order_book is None:
             conn_depth_snp = self._pipe.get('depth_snapshot')
             if conn_depth_snp.poll():
