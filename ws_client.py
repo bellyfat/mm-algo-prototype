@@ -1,6 +1,6 @@
 import asyncio
 import ssl
-import pathlib
+import certifi
 from abc import abstractmethod
 import websockets
 import json
@@ -19,8 +19,7 @@ class WsClient:
     def __init__(self, sub_message: str,
                  pipe: Dict[str, mp.connection.Connection]) -> None:
         self._ssl_context = ssl.SSLContext(protocol=ssl.PROTOCOL_TLS_CLIENT)
-        self. _ssl_context.load_verify_locations(
-            cafile=pathlib.Path('/etc/ssl/*').with_name(name='cert.pem'))
+        self. _ssl_context.load_verify_locations(cafile=certifi.where())
         self._sub_message = sub_message
         self._pipe = _pipe = pipe
 
