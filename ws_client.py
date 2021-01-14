@@ -14,14 +14,14 @@ from api_auth import BybitApiAuth, BinanceApiAuth
 class WsClient:
     _ssl_context: ssl.SSLContext
     _sub_message: str
-    _pipe: Dict[str, mp.connection.Connection]
+    _feed_conns: Dict[str, mp.connection.Connection]
 
     def __init__(self, sub_message: str,
-                 pipe: Dict[str, mp.connection.Connection]) -> None:
+                 feed_conns: Dict[str, mp.connection.Connection]) -> None:
         self._ssl_context = ssl.SSLContext(protocol=ssl.PROTOCOL_TLS_CLIENT)
         self. _ssl_context.load_verify_locations(cafile=certifi.where())
         self._sub_message = sub_message
-        self._pipe = _pipe = pipe
+        self._feed_conns = feed_conns
 
     @abstractmethod
     async def start(self) -> None:
@@ -59,11 +59,11 @@ class BinanceWsClient(WsClient):
     _depth_snapshot_path = '/dapi/v1/depth?symbol={}&limit=1000'.format(_SYMBOL)
 
     def __init__(self, api_file_path: str,
-                 pipe: Dict[str, mp.connection.Connection]) -> None:
+                 feed_conns: Dict[str, mp.connection.Connection]) -> None:
         self._api_auth = BinanceApiAuth(file_path=api_file_path)
         sub_message = json.dumps(
             obj={'method': 'SUBSCRIBE', 'params': ['btcusd_perp@depth@100ms']})
-        super().__init__(sub_message=sub_message, pipe=pipe)
+        super().__init__(sub_message=sub_message, feed_conns=feed_conns)
 
     async def start(self) -> None:
         listen_key = (await self.call_listen_key()).get('listenKey')
@@ -84,13 +84,13 @@ class BinanceWsClient(WsClient):
     async def get_depth_snapshot(self) -> None:
         res = await self.http_get(
             uri=self._BASE_API_ENDPOINT + self._depth_snapshot_path)
-        self._pipe.get('depth_snapshot').send(obj=res)
+        self._feed_conns.get('depth_snapshot').send(obj=res)
 
     async def on_connect(self,
                          websocket: websockets.WebSocketClientProtocol) -> None:
         while True:
             res = json.loads(s=await websocket.recv())
-            self._pipe.get('websocket_stream').send(obj=res)
+            self._feed_conns.get('websocket_stream').send(obj=res)
             if not self._is_depth_snap_req and res.get('e') == 'depthUpdate':
                 asyncio.create_task(coro=self.get_depth_snapshot())
                 self._is_depth_snap_req = True
@@ -102,13 +102,13 @@ class BybitWsClient(WsClient):
     _ping_msg = json.dumps(obj={'op': 'ping'})
 
     def __init__(self, api_file_path: str,
-                 pipe: Dict[str, mp.connection.Connection]) -> None:
+                 feed_conns: Dict[str, mp.connection.Connection]) -> None:
         self._api_auth = BybitApiAuth(file_path=api_file_path)
         sub_message = json.dumps(
             obj={'op': 'subscribe',
                  'args': ['orderBookL2_25.BTCUSD', 'position', 'order',
                           'execution']})
-        super().__init__(sub_message=sub_message, pipe=pipe)
+        super().__init__(sub_message=sub_message, feed_conns=feed_conns)
 
     async def start(self) -> None:
         await self.connect(uri=self._api_auth.get_websocket_uri())
@@ -119,7 +119,7 @@ class BybitWsClient(WsClient):
         while True:
             res = json.loads(s=await websocket.recv())
             if res.get('topic') is not None:
-                self._pipe.get('websocket_stream').send(obj=res)
+                self._feed_conns.get('websocket_stream').send(obj=res)
             elif res.get('ret_msg') == 'pong' and res.get('success'):
                 self._pong_recv = True
 
