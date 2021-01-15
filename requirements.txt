@@ -8,6 +8,7 @@ cffi==1.14.4
 chardet==3.0.4
 idna==3.1
 multidict==5.1.0
+numpy==1.19.5
 pycares==3.1.1
 pycparser==2.20
 typing-extensions==3.7.4.3
