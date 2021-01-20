@@ -30,6 +30,9 @@ class ApiAuth:
         self.key = api_credentials.get('id')
         self.secret = api_credentials.get('secret')
 
+    def get_signature(self, message) -> str:
+        return get_signature(secret=self.secret, message=message)
+
 
 class BinanceApiAuth(ApiAuth):
     headers: dict
@@ -40,11 +43,22 @@ class BinanceApiAuth(ApiAuth):
                         'X-MBX-APIKEY': self.key}
 
     def get_listen_key_data(self) -> str:
-        timestamp = str(get_milli_timestamp())
-        params = {'timestamp': timestamp,
-                  'signature': get_signature(secret=self.secret,
-                                             message=timestamp)}
+        params = {'timestamp': str(get_milli_timestamp())}
+        params['signature'] = self.get_signature(
+            message=urlencode(query=params))
         return urlencode(query=params)
+
+    def get_open_orders_auth(self, symbol: str) -> str:
+        params = {'symbol': symbol, 'timestamp': str(get_milli_timestamp())}
+        params['signature'] = self.get_signature(
+            message=urlencode(query=params))
+        return '/dapi/v1/openOrders?' + urlencode(query=params)
+
+    def get_position_risk_auth(self, pair: str) -> str:
+        params = {'pair': pair, 'timestamp': str(get_milli_timestamp())}
+        params['signature'] = self.get_signature(
+            message=urlencode(query=params))
+        return '/dapi/v1/positionRisk?' + urlencode(query=params)
 
 
 class BybitApiAuth(ApiAuth):
@@ -54,6 +68,18 @@ class BybitApiAuth(ApiAuth):
     def get_websocket_uri(self) -> str:
         expires = str(get_milli_timestamp() + 5000)
         params = {'api_key': self.key, 'expires': expires,
-                  'signature': get_signature(secret=self.secret,
-                                             message='GET/realtime' + expires)}
+                  'signature': self.get_signature(
+                      message='GET/realtime' + expires)}
         return 'wss://stream.bybit.com/realtime?' + urlencode(query=params)
+
+    def get_active_orders_auth(self, symbol: str) -> str:
+        params = {'api_key': self.key, 'symbol': symbol,
+                  'timestamp': str(get_milli_timestamp())}
+        params['sign'] = self.get_signature(message=urlencode(query=params))
+        return '/v2/private/order?' + urlencode(query=params)
+
+    def get_position_list_auth(self, symbol: str) -> str:
+        params = {'api_key': self.key, 'symbol': symbol,
+                  'timestamp': str(get_milli_timestamp())}
+        params['sign'] = self.get_signature(message=urlencode(query=params))
+        return '/v2/private/position/list?' + urlencode(query=params)

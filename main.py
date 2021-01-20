@@ -35,10 +35,17 @@ async def run_async(*args: Coroutine) -> None:
     await asyncio.gather(*args)
 
 if __name__ == '__main__':
-    bybit_pipes = get_pipes(pipe_names=('websocket_stream',))
-    binance_pipes = get_pipes(pipe_names=('websocket_stream', 'depth_snapshot'))
+    bybit_pipes = get_pipes(
+        pipe_names=('websocket_stream', 'active_orders', 'positions'))
+    binance_pipes = get_pipes(
+        pipe_names=('book_reset', 'websocket_stream', 'depth_snapshot',
+                    'open_orders', 'positions'))
 
-    strategy_pipes = get_pipes(pipe_names=('bybit_bbo_chg', 'binance_bbo_chg'))
+    strategy_pipes = get_pipes(
+        pipe_names=('bybit_bbo_chg', 'binance_bbo_chg', 'bybit_order',
+                    'bybit_execution', 'binance_order_trade_upd',
+                    'bybit_active_orders', 'binance_open_orders',
+                    'bybit_position', 'binance_position'))
 
     bybit_feed = BybitFeed(
         ws_conns=get_conns(pipes=bybit_pipes, index=0),

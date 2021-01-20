@@ -19,7 +19,7 @@ class WsClient:
     def __init__(self, sub_message: str,
                  feed_conns: Dict[str, mp.connection.Connection]) -> None:
         self._ssl_context = ssl.SSLContext(protocol=ssl.PROTOCOL_TLS_CLIENT)
-        self. _ssl_context.load_verify_locations(cafile=certifi.where())
+        self._ssl_context.load_verify_locations(cafile=certifi.where())
         self._sub_message = sub_message
         self._feed_conns = feed_conns
 
@@ -32,11 +32,21 @@ class WsClient:
                          websocket: websockets.WebSocketClientProtocol) -> None:
         pass
 
+    def on_disconnect(self) -> None:
+        pass
+
     async def connect(self, uri: str) -> None:
-        async with websockets.connect(uri=uri,
-                                      ssl=self._ssl_context) as websocket:
-            await websocket.send(message=self._sub_message)
-            await self.on_connect(websocket=websocket)
+        try:
+            async with websockets.connect(uri=uri,
+                                          ssl=self._ssl_context) as websocket:
+                await websocket.send(message=self._sub_message)
+                try:
+                    await self.on_connect(websocket=websocket)
+                except websockets.ConnectionClosed:
+                    self.on_disconnect()
+                    await self.start()
+        except websockets.InvalidHandshake:
+            await self.start()
 
     async def http_get(self, uri: str, **kwargs) -> dict:
         async with aiohttp.ClientSession() as session:
@@ -54,9 +64,7 @@ class WsClient:
 class BinanceWsClient(WsClient):
     _BASE_API_ENDPOINT = 'https://dapi.binance.com'
     _api_auth: BinanceApiAuth
-    _SYMBOL = 'BTCUSD_PERP'
-    _is_depth_snap_req = False
-    _depth_snapshot_path = '/dapi/v1/depth?symbol={}&limit=1000'.format(_SYMBOL)
+    _depth_snapshot_path = '/dapi/v1/depth?symbol=BTCUSD_PERP&limit=1000'
 
     def __init__(self, api_file_path: str,
                  feed_conns: Dict[str, mp.connection.Connection]) -> None:
@@ -69,6 +77,9 @@ class BinanceWsClient(WsClient):
         listen_key = (await self.call_listen_key()).get('listenKey')
         asyncio.create_task(coro=self.listen_key_heartbeat())
         await self.connect(uri='wss://dstream.binance.com/ws/' + listen_key)
+
+    def on_disconnect(self) -> None:
+        self._feed_conns.get('book_reset').send(obj=None)
 
     async def call_listen_key(self) -> dict:
         return await self.http_post(
@@ -86,17 +97,33 @@ class BinanceWsClient(WsClient):
             uri=self._BASE_API_ENDPOINT + self._depth_snapshot_path)
         self._feed_conns.get('depth_snapshot').send(obj=res)
 
+    async def get_open_orders(self) -> None:
+        res = await self.http_get(
+            uri=self._BASE_API_ENDPOINT + self._api_auth.get_open_orders_auth(
+                symbol='BTCUSD_PERP'),
+            headers={'X-MBX-APIKEY': self._api_auth.key})
+        self._feed_conns.get('open_orders').send(obj=res)
+
+    async def get_positions(self) -> None:
+        res = await self.http_get(
+            uri=self._BASE_API_ENDPOINT + self._api_auth.get_position_risk_auth(
+                pair='BTCUSD'),
+            headers={'X-MBX-APIKEY': self._api_auth.key})
+        self._feed_conns.get('positions').send(obj=res)
+
     async def on_connect(self,
                          websocket: websockets.WebSocketClientProtocol) -> None:
         while True:
             res = json.loads(s=await websocket.recv())
             self._feed_conns.get('websocket_stream').send(obj=res)
-            if not self._is_depth_snap_req and res.get('e') == 'depthUpdate':
+            if res.get('result') is None and res.get('id') == 1:
                 asyncio.create_task(coro=self.get_depth_snapshot())
-                self._is_depth_snap_req = True
+                asyncio.create_task(coro=self.get_open_orders())
+                asyncio.create_task(coro=self.get_positions())
 
 
 class BybitWsClient(WsClient):
+    _BASE_API_ENDPOINT = 'https://api.bybit.com'
     _api_auth: BybitApiAuth
     _pong_recv = False
     _ping_msg = json.dumps(obj={'op': 'ping'})
@@ -106,12 +133,23 @@ class BybitWsClient(WsClient):
         self._api_auth = BybitApiAuth(file_path=api_file_path)
         sub_message = json.dumps(
             obj={'op': 'subscribe',
-                 'args': ['orderBookL2_25.BTCUSD', 'position', 'order',
-                          'execution']})
+                 'args': ['orderBookL2_25.BTCUSD', 'order', 'execution']})
         super().__init__(sub_message=sub_message, feed_conns=feed_conns)
 
     async def start(self) -> None:
         await self.connect(uri=self._api_auth.get_websocket_uri())
+
+    async def get_active_orders(self) -> None:
+        res = await self.http_get(
+            uri=(self._BASE_API_ENDPOINT
+                 + self._api_auth.get_active_orders_auth(symbol='BTCUSD')))
+        self._feed_conns.get('active_orders').send(obj=res)
+
+    async def get_positions(self) -> None:
+        res = await self.http_get(
+            uri=(self._BASE_API_ENDPOINT
+                 + self._api_auth.get_position_list_auth(symbol='BTCUSD')))
+        self._feed_conns.get('positions').send(obj=res)
 
     async def on_connect(self,
                          websocket: websockets.WebSocketClientProtocol) -> None:
@@ -120,6 +158,10 @@ class BybitWsClient(WsClient):
             res = json.loads(s=await websocket.recv())
             if res.get('topic') is not None:
                 self._feed_conns.get('websocket_stream').send(obj=res)
+            elif (res.get('request').get('op') == 'subscribe'
+                  and res.get('success') is True):
+                asyncio.create_task(coro=self.get_active_orders())
+                asyncio.create_task(coro=self.get_positions())
             elif res.get('ret_msg') == 'pong' and res.get('success'):
                 self._pong_recv = True
 
@@ -132,4 +174,3 @@ class BybitWsClient(WsClient):
                 raise Exception('Bybit: no pong received.')
             else:
                 self._pong_recv = False
-
