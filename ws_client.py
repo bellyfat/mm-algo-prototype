@@ -79,7 +79,7 @@ class BinanceWsClient(WsClient):
         await self.connect(uri='wss://dstream.binance.com/ws/' + listen_key)
 
     def on_disconnect(self) -> None:
-        self._feed_conns.get('book_reset').send(obj=None)
+        self._feed_conns.get('book-reset').send(obj=None)
 
     async def call_listen_key(self) -> dict:
         return await self.http_post(
@@ -95,27 +95,27 @@ class BinanceWsClient(WsClient):
     async def get_depth_snapshot(self) -> None:
         res = await self.http_get(
             uri=self._BASE_API_ENDPOINT + self._depth_snapshot_path)
-        self._feed_conns.get('depth_snapshot').send(obj=res)
+        self._feed_conns.get('depth-snap').send(obj=res)
 
     async def get_open_orders(self) -> None:
         res = await self.http_get(
             uri=self._BASE_API_ENDPOINT + self._api_auth.get_open_orders_auth(
                 symbol='BTCUSD_PERP'),
             headers={'X-MBX-APIKEY': self._api_auth.key})
-        self._feed_conns.get('open_orders').send(obj=res)
+        self._feed_conns.get('order-snap').send(obj=res)
 
     async def get_positions(self) -> None:
         res = await self.http_get(
             uri=self._BASE_API_ENDPOINT + self._api_auth.get_position_risk_auth(
                 pair='BTCUSD'),
             headers={'X-MBX-APIKEY': self._api_auth.key})
-        self._feed_conns.get('positions').send(obj=res)
+        self._feed_conns.get('position-snap').send(obj=res)
 
     async def on_connect(self,
                          websocket: websockets.WebSocketClientProtocol) -> None:
         while True:
             res = json.loads(s=await websocket.recv())
-            self._feed_conns.get('websocket_stream').send(obj=res)
+            self._feed_conns.get('ws-stream').send(obj=res)
             if res.get('result') is None and res.get('id') == 1:
                 asyncio.create_task(coro=self.get_depth_snapshot())
                 asyncio.create_task(coro=self.get_open_orders())
@@ -133,7 +133,8 @@ class BybitWsClient(WsClient):
         self._api_auth = BybitApiAuth(file_path=api_file_path)
         sub_message = json.dumps(
             obj={'op': 'subscribe',
-                 'args': ['orderBookL2_25.BTCUSD', 'order', 'execution']})
+                 'args': ['orderBookL2_25.BTCUSD', 'order', 'execution',
+                          'position']})
         super().__init__(sub_message=sub_message, feed_conns=feed_conns)
 
     async def start(self) -> None:
@@ -143,13 +144,13 @@ class BybitWsClient(WsClient):
         res = await self.http_get(
             uri=(self._BASE_API_ENDPOINT
                  + self._api_auth.get_active_orders_auth(symbol='BTCUSD')))
-        self._feed_conns.get('active_orders').send(obj=res)
+        self._feed_conns.get('order-snap').send(obj=res)
 
     async def get_positions(self) -> None:
         res = await self.http_get(
             uri=(self._BASE_API_ENDPOINT
                  + self._api_auth.get_position_list_auth(symbol='BTCUSD')))
-        self._feed_conns.get('positions').send(obj=res)
+        self._feed_conns.get('position-snap').send(obj=res)
 
     async def on_connect(self,
                          websocket: websockets.WebSocketClientProtocol) -> None:
@@ -157,7 +158,7 @@ class BybitWsClient(WsClient):
         while True:
             res = json.loads(s=await websocket.recv())
             if res.get('topic') is not None:
-                self._feed_conns.get('websocket_stream').send(obj=res)
+                self._feed_conns.get('ws-stream').send(obj=res)
             elif (res.get('request').get('op') == 'subscribe'
                   and res.get('success') is True):
                 asyncio.create_task(coro=self.get_active_orders())

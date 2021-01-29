@@ -4,6 +4,7 @@ from strategy import Strategy, MMStrategy
 import multiprocessing as mp
 import asyncio
 from typing import Dict, List, Coroutine, Tuple, Union
+from gateway import Gateway
 
 API_KEY_PATH_BYBIT = '../bybit_api_keys.json'
 API_KEY_PATH_BINANCE = '../binance_api_keys.json'
@@ -31,21 +32,30 @@ def run_strategies(*args: Strategy) -> None:
             arg.run_strategy()
 
 
+def run_gateway(arg: Gateway) -> None:
+    while True:
+        arg.run_gateway()
+
+
 async def run_async(*args: Coroutine) -> None:
     await asyncio.gather(*args)
 
 if __name__ == '__main__':
     bybit_pipes = get_pipes(
-        pipe_names=('websocket_stream', 'active_orders', 'positions'))
+        pipe_names=('ws-stream', 'order-snap', 'position-snap'))
     binance_pipes = get_pipes(
-        pipe_names=('book_reset', 'websocket_stream', 'depth_snapshot',
-                    'open_orders', 'positions'))
+        pipe_names=('book-reset', 'ws-stream', 'depth-snap',
+                    'order-snap', 'position-snap'))
 
     strategy_pipes = get_pipes(
-        pipe_names=('bybit_bbo_chg', 'binance_bbo_chg', 'bybit_order',
-                    'bybit_execution', 'binance_order_trade_upd',
-                    'bybit_active_orders', 'binance_open_orders',
-                    'bybit_position', 'binance_position'))
+        pipe_names=('bybit-bbo-chg', 'binance-bbo-chg', 'bybit-order-update',
+                    'bybit-execution', 'binance-order-trade-update',
+                    'bybit-order-snap', 'binance-order-snap', 'bybit-position',
+                    'binance-account-update', 'bybit-position-snap',
+                    'binance-position-snap'))
+
+    gateway_pipes = get_pipes(
+        pipe_names=('binance-new-order', 'bybit-new-order', 'bybit-amend'))
 
     bybit_feed = BybitFeed(
         ws_conns=get_conns(pipes=bybit_pipes, index=0),
@@ -54,7 +64,11 @@ if __name__ == '__main__':
         ws_conns=get_conns(pipes=binance_pipes, index=0),
         strategy_conns=get_conns(pipes=strategy_pipes, index=1))
 
-    strategy = MMStrategy(feed_conns=get_conns(pipes=strategy_pipes, index=0))
+    strategy = MMStrategy(feed_conns=get_conns(pipes=strategy_pipes, index=0),
+                          gateway_conns=get_conns(pipes=gateway_pipes, index=1))
+    gateway = Gateway(api_pth_bybit=API_KEY_PATH_BYBIT,
+                      api_pth_binance=API_KEY_PATH_BINANCE,
+                      strategy_conns=get_conns(pipes=gateway_pipes, index=0))
 
     bybit_ws_client = BybitWsClient(
         api_file_path=API_KEY_PATH_BYBIT,
@@ -65,5 +79,6 @@ if __name__ == '__main__':
 
     mp.Process(target=process_feeds, args=(bybit_feed, binance_feed)).start()
     mp.Process(target=run_strategies, args=(strategy,)).start()
+    mp.Process(target=run_gateway, args=(gateway,)).start()
     asyncio.get_event_loop().run_until_complete(
         future=run_async(bybit_ws_client.start(), binance_ws_client.start()))

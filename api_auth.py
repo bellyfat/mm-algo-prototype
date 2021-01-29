@@ -4,6 +4,7 @@ import hmac
 import hashlib
 import time
 from urllib.parse import urlencode
+from collections import OrderedDict
 
 
 def read_json_file(file_path: str) -> Dict[str, str]:
@@ -60,6 +61,11 @@ class BinanceApiAuth(ApiAuth):
             message=urlencode(query=params))
         return '/dapi/v1/positionRisk?' + urlencode(query=params)
 
+    def get_order_auth_body(self, order: OrderedDict) -> str:
+        order['timestamp'] = get_milli_timestamp()
+        order['signature'] = self.get_signature(message=urlencode(query=order))
+        return urlencode(query=order)
+
 
 class BybitApiAuth(ApiAuth):
     def __init__(self, file_path: str) -> None:
@@ -83,3 +89,11 @@ class BybitApiAuth(ApiAuth):
                   'timestamp': str(get_milli_timestamp())}
         params['sign'] = self.get_signature(message=urlencode(query=params))
         return '/v2/private/position/list?' + urlencode(query=params)
+
+    def get_order_auth_body(self, order: OrderedDict) -> str:
+        order.update({'api_key': self.key})
+        order.move_to_end(key='api_key', last=False)
+        order['timestamp'] = get_milli_timestamp()
+        order['sign'] = self.get_signature(message=urlencode(query=order))
+        return json.dumps(obj=order)
+
