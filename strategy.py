@@ -1,11 +1,10 @@
-import multiprocessing.connection
-import multiprocessing as mp
-from typing import Dict
+from typing import Tuple
 from abc import abstractmethod
 import numpy as np
 from collections import OrderedDict
 import random
 import string
+import gateway
 
 
 def get_random_string(n):
@@ -13,16 +12,34 @@ def get_random_string(n):
 
 
 class Strategy:
-    _feed_conns = Dict[str, mp.connection.Connection]
-    _gateway_conns = Dict[str, mp.connection.Connection]
+    _gateway = gateway.Gateway
 
-    def __init__(self, feed_conns: Dict[str, mp.connection.Connection],
-                 gateway_conns: Dict[str, mp.connection.Connection]) -> None:
-        self._feed_conns = feed_conns
-        self._gateway_conns = gateway_conns
+    def __init__(self, gw: gateway.Gateway) -> None:
+        self._gateway = gw
 
     @abstractmethod
-    def run_strategy(self) -> None:
+    def on_bybit_bbo_chg(self, data: Tuple[float, float]) -> None:
+        pass
+
+    @abstractmethod
+    def on_binance_bbo_chg(self, data: Tuple[float, float]) -> None:
+        pass
+
+    @abstractmethod
+    def on_bybit_order_update(self, data: dict) -> None:
+        pass
+
+    @abstractmethod
+    def on_bybit_execution(self, data: dict) -> None:
+        pass
+
+
+    @abstractmethod
+    def on_bybit_order_snap(self, data: dict) -> None:
+        pass
+
+    @abstractmethod
+    def on_bybit_position_snap(self, data: dict) -> None:
         pass
 
 
@@ -40,11 +57,22 @@ class MMStrategy(Strategy):
     _binance_symbol = 'BTCUSD_PERP'
     _bybit_quote_size = 100
 
-    def __init__(self, feed_conns: Dict[str, mp.connection.Connection],
-                 gateway_conns: Dict[str, mp.connection.Connection]) -> None:
-        super().__init__(feed_conns=feed_conns, gateway_conns=gateway_conns)
+    def __init__(self, gw: gateway.Gateway) -> None:
+        super().__init__(gw=gw)
 
-    def handle_bybit_order_update(self, data: dict) -> None:
+    def on_bybit_bbo_chg(self, data: Tuple[float, float]) -> None:
+        self._bybit_bbo = list(data)
+        if len(self._binance_bbo) == 2:
+            self.compute_quote_targets()
+            self.check_new_quotes()
+
+    def on_binance_bbo_chg(self, data: Tuple[float, float]) -> None:
+        self._binance_bbo = list(data)
+        if len(self._bybit_bbo) == 2:
+            self.compute_quote_targets()
+            self.check_new_quotes()
+
+    def on_bybit_order_update(self, data: dict) -> None:
         orders = data.get('data')
         for order in orders:
             order_status = order.get('order_status')
@@ -60,7 +88,7 @@ class MMStrategy(Strategy):
                 self._bybit_active_orders.pop(ord_link_id)
                 self.on_cancel(order=order)
 
-    def handle_bybit_execution(self, data: dict) -> None:
+    def on_bybit_execution(self, data: dict) -> None:
         execs = data.get('data')
         for exec in execs:
             exec_side = exec.get('side')
@@ -74,6 +102,19 @@ class MMStrategy(Strategy):
                 self._bybit_position -= exec_qty
                 if exec_type == 'Trade':
                     self.on_sell_trade(execution=exec)
+
+    def on_bybit_order_snap(self, data: dict) -> None:
+        self._bybit_active_orders = {}
+        for order in data.get('result'):
+            ord_link_id = order.get('order_link_id')
+            self._bybit_active_orders[ord_link_id] = order
+
+    def on_bybit_position_snap(self, data: dict) -> None:
+        result: dict = data.get('result')
+        size: int = result.get('size')
+        side: str = result.get('side')
+        self._bybit_position = (
+            size if side == 'Long' or side == 'None' else -size)
 
     def on_cancel(self, order: dict) -> None:
         if self._bybit_bid_ord_link_id == order.get('order_link_id'):
@@ -95,7 +136,7 @@ class MMStrategy(Strategy):
         if hedge_qty != 0:
             hedge_order = self.get_binance_new_market_order(side='SELL',
                                                             qty=hedge_qty)
-            self._gateway_conns.get('binance-new-order').send(obj=hedge_order)
+            self._gateway.prepare_binance_new_order(order=hedge_order)
             if execution.get('leaves_qty') == 0:
                 print('FILLED BUY', self._bybit_position)
                 if self._bybit_position == 0:
@@ -109,7 +150,7 @@ class MMStrategy(Strategy):
         if hedge_qty != 0:
             hedge_order = self.get_binance_new_market_order(side='BUY',
                                                             qty=hedge_qty)
-            self._gateway_conns.get('binance-new-order').send(obj=hedge_order)
+            self._gateway.prepare_binance_new_order(order=hedge_order)
             if execution.get('leaves_qty') == 0:
                 print('FILLED SELL', self._bybit_position)
                 if self._bybit_position == 0:
@@ -117,36 +158,6 @@ class MMStrategy(Strategy):
                     self.place_new_bybit_order(side='Sell')
                 else:
                     self._bybit_ask_ord_link_id = None
-
-    def run_strategy(self) -> None:
-        for key, conn in self._feed_conns.items():
-            if conn.poll():
-                data = conn.recv()
-                if key == 'bybit-bbo-chg':
-                    self._bybit_bbo = list(data)
-                    if len(self._binance_bbo) == 2:
-                        self.compute_quote_targets()
-                        self.check_new_quotes()
-                elif key == 'binance-bbo-chg':
-                    self._binance_bbo = list(data)
-                    if len(self._bybit_bbo) == 2:
-                        self.compute_quote_targets()
-                        self.check_new_quotes()
-                elif key == 'bybit-order-update':
-                    self.handle_bybit_order_update(data=data)
-                elif key == 'bybit-execution':
-                    self.handle_bybit_execution(data=data)
-                elif key == 'bybit-order-snap':
-                    self._bybit_active_orders = {}
-                    for order in data.get('result'):
-                        ord_link_id = order.get('order_link_id')
-                        self._bybit_active_orders[ord_link_id] = order
-                elif key == 'bybit-position-snap':
-                    result: dict = data.get('result')
-                    size: int = result.get('size')
-                    side: str = result.get('side')
-                    self._bybit_position = (
-                        size if side == 'Long' or side == 'None' else -size)
 
     def get_bybit_new_limit_order(self, order_link_id: str, price: float,
                                   side: str) -> OrderedDict:
@@ -172,13 +183,13 @@ class MMStrategy(Strategy):
             order = self.get_bybit_new_limit_order(
                 order_link_id=self._bybit_bid_ord_link_id,
                 price=self._quote_targets[0], side=side)
-            self._gateway_conns.get('bybit-new-order').send(obj=order)
+            self._gateway.prepare_bybit_new_order(order=order)
         elif side == 'Sell':
             self._bybit_ask_ord_link_id = get_random_string(n=36)
             order = self.get_bybit_new_limit_order(
                 order_link_id=self._bybit_ask_ord_link_id,
                 price=self._quote_targets[1], side=side)
-            self._gateway_conns.get('bybit-new-order').send(obj=order)
+            self._gateway.prepare_bybit_new_order(order=order)
 
     def compute_quote_targets(self) -> None:
         average_price = np.mean(a=self._bybit_bbo + self._binance_bbo)
@@ -216,10 +227,11 @@ class MMStrategy(Strategy):
                 self._bybit_bid_ord_link_id)
             if (order_local is not None
                     and order_local.get('price') != self._quote_targets[0]):
+                print('Amend Buy')
                 order = self.get_bybit_order_cancel_replace(
                     order_link_id=self._bybit_bid_ord_link_id,
                     p_r_price_=str(self._quote_targets[0]))
-                self._gateway_conns.get('bybit-amend').send(obj=order)
+                self._gateway.prepare_bybit_amend_order(order=order)
         elif self._bybit_position == 0:
             self.place_new_bybit_order(side='Buy')
         if self._bybit_ask_ord_link_id is not None:
@@ -227,9 +239,10 @@ class MMStrategy(Strategy):
                 self._bybit_ask_ord_link_id)
             if (order_local is not None
                     and order_local.get('price') != self._quote_targets[1]):
+                print('Amend Sell')
                 order = self.get_bybit_order_cancel_replace(
                     order_link_id=self._bybit_ask_ord_link_id,
                     p_r_price_=str(self._quote_targets[1]))
-                self._gateway_conns.get('bybit-amend').send(obj=order)
+                self._gateway.prepare_bybit_amend_order(order=order)
         elif self._bybit_position == 0:
             self.place_new_bybit_order(side='Sell')
