@@ -56,6 +56,8 @@ class MMStrategy(Strategy):
     _bybit_symbol = 'BTCUSD'
     _binance_symbol = 'BTCUSD_PERP'
     _bybit_quote_size = 100
+    is_bid_amend_queued = [False]
+    is_ask_amend_queued = [False]
 
     def __init__(self, gw: gateway.Gateway) -> None:
         super().__init__(gw=gw)
@@ -225,24 +227,28 @@ class MMStrategy(Strategy):
         if self._bybit_bid_ord_link_id is not None:
             order_local = self._bybit_active_orders.get(
                 self._bybit_bid_ord_link_id)
-            if (order_local is not None
-                    and order_local.get('price') != self._quote_targets[0]):
+            if (order_local is not None and not self.is_bid_amend_queued[0]
+                    and order_local.get('price') != self._quote_targets[0]
+                    and not self._gateway.is_bybit_amend_limited):
                 print('Amend Buy')
                 order = self.get_bybit_order_cancel_replace(
                     order_link_id=self._bybit_bid_ord_link_id,
                     p_r_price_=str(self._quote_targets[0]))
-                self._gateway.prepare_bybit_amend_order(order=order)
+                self._gateway.prepare_bybit_amend_order(
+                    order=order, is_queued=self.is_bid_amend_queued)
         elif self._bybit_position == 0:
             self.place_new_bybit_order(side='Buy')
         if self._bybit_ask_ord_link_id is not None:
             order_local = self._bybit_active_orders.get(
                 self._bybit_ask_ord_link_id)
-            if (order_local is not None
-                    and order_local.get('price') != self._quote_targets[1]):
+            if (order_local is not None and not self.is_ask_amend_queued[0]
+                    and order_local.get('price') != self._quote_targets[1]
+                    and not self._gateway.is_bybit_amend_limited):
                 print('Amend Sell')
                 order = self.get_bybit_order_cancel_replace(
                     order_link_id=self._bybit_ask_ord_link_id,
                     p_r_price_=str(self._quote_targets[1]))
-                self._gateway.prepare_bybit_amend_order(order=order)
+                self._gateway.prepare_bybit_amend_order(
+                    order=order, is_queued=self.is_ask_amend_queued)
         elif self._bybit_position == 0:
             self.place_new_bybit_order(side='Sell')
