@@ -87,7 +87,8 @@ class MMStrategy(Strategy):
                 self._bybit_active_orders.pop(ord_link_id)
             elif order_status == 'Cancelled':
                 print('Cancelled')
-                self._bybit_active_orders.pop(ord_link_id)
+                if ord_link_id in self._bybit_active_orders:
+                    self._bybit_active_orders.pop(ord_link_id)
                 self.on_cancel(order=order)
 
     def on_bybit_execution(self, data: dict) -> None:
