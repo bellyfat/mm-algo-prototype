@@ -141,12 +141,11 @@ class MMStrategy(Strategy):
                                                             qty=hedge_qty)
             self._gateway.prepare_binance_new_order(order=hedge_order)
             if execution.get('leaves_qty') == 0:
+                self._bybit_bid_ord_link_id = None
                 print('FILLED BUY', self._bybit_position)
                 if self._bybit_position == 0:
                     self.place_new_bybit_order(side='Buy')
                     self.place_new_bybit_order(side='Sell')
-                else:
-                    self._bybit_bid_ord_link_id = None
 
     def on_sell_trade(self, execution: dict) -> None:
         hedge_qty = self.get_hedge_qty(execution=execution)
@@ -155,12 +154,11 @@ class MMStrategy(Strategy):
                                                             qty=hedge_qty)
             self._gateway.prepare_binance_new_order(order=hedge_order)
             if execution.get('leaves_qty') == 0:
+                self._bybit_ask_ord_link_id = None
                 print('FILLED SELL', self._bybit_position)
                 if self._bybit_position == 0:
                     self.place_new_bybit_order(side='Buy')
                     self.place_new_bybit_order(side='Sell')
-                else:
-                    self._bybit_ask_ord_link_id = None
 
     def get_bybit_new_limit_order(self, order_link_id: str, price: float,
                                   side: str) -> OrderedDict:
