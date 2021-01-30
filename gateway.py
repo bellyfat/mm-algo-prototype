@@ -55,7 +55,8 @@ class Gateway:
                     ssl=True) as res:
                 res_bdy = await res.json()
                 is_queued[0] = False
-                if res_bdy.get('rate_limit_status') == 0:
+                if (res_bdy.get('rate_limit_status') == 0
+                        and not self.is_bybit_amend_limited):
                     print('BYBIT AMEND RATE LIMIT START')
                     self.is_bybit_amend_limited = True
                     sleep_for = (res_bdy.get('rate_limit_reset_ms')
