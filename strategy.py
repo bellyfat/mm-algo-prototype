@@ -52,7 +52,7 @@ class MMStrategy(Strategy):
     _bybit_position = 0
     _minimum_quotes = []
     _quote_targets = []
-    _NET_FEE_OFFSET = 0.00015
+    _NET_FEE_OFFSET = 0.0004
     _bybit_symbol = 'BTCUSD'
     _binance_symbol = 'BTCUSD_PERP'
     _bybit_quote_size = 100
@@ -181,18 +181,20 @@ class MMStrategy(Strategy):
                             'symbol': self._bybit_symbol})
 
     def place_new_bybit_order(self, side: str) -> None:
-        if side == 'Buy':
-            self._bybit_bid_ord_link_id = get_random_string(n=36)
-            order = self.get_bybit_new_limit_order(
-                order_link_id=self._bybit_bid_ord_link_id,
-                price=self._quote_targets[0], side=side)
-            self._gateway.prepare_bybit_new_order(order=order)
-        elif side == 'Sell':
-            self._bybit_ask_ord_link_id = get_random_string(n=36)
-            order = self.get_bybit_new_limit_order(
-                order_link_id=self._bybit_ask_ord_link_id,
-                price=self._quote_targets[1], side=side)
-            self._gateway.prepare_bybit_new_order(order=order)
+        print('Place new order Bybit', side)
+        if not self._gateway.is_bybit_amend_limited:
+            if side == 'Buy':
+                self._bybit_bid_ord_link_id = get_random_string(n=36)
+                order = self.get_bybit_new_limit_order(
+                    order_link_id=self._bybit_bid_ord_link_id,
+                    price=self._quote_targets[0], side=side)
+                self._gateway.prepare_bybit_new_order(order=order)
+            elif side == 'Sell':
+                self._bybit_ask_ord_link_id = get_random_string(n=36)
+                order = self.get_bybit_new_limit_order(
+                    order_link_id=self._bybit_ask_ord_link_id,
+                    price=self._quote_targets[1], side=side)
+                self._gateway.prepare_bybit_new_order(order=order)
 
     def compute_quote_targets(self) -> None:
         average_price = np.mean(a=self._bybit_bbo + self._binance_bbo)
