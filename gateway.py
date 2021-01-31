@@ -1,21 +1,18 @@
 import aiohttp
 import api_auth
-from typing import List
+from typing import List, Callable
 from collections import OrderedDict
 import asyncio
-import strategy
 
 
 class Gateway:
     _bybit_auth: api_auth.BybitApiAuth
     _binance_auth: api_auth.BinanceApiAuth
-    _strategy: strategy.MMStrategy
+    is_rate_limited: bool
 
-    def __init__(self, api_pth_bybit: str, api_pth_binance: str,
-                 strategy: strategy.MMStrategy) -> None:
+    def __init__(self, api_pth_bybit: str, api_pth_binance: str) -> None:
         self._bybit_auth = api_auth.BybitApiAuth(file_path=api_pth_bybit)
         self._binance_auth = api_auth.BinanceApiAuth(file_path=api_pth_binance)
-        self._strategy = strategy
 
     def prepare_bybit_new_order(self, order: OrderedDict) -> None:
         order_bdy_str = self._bybit_auth.get_order_auth_body(order=order)
@@ -27,7 +24,8 @@ class Gateway:
             coro=self.send_binance_new_order(order=order_bdy_str))
 
     def prepare_bybit_amend_order(self, order: OrderedDict,
-                                  is_queued: List[bool]) -> None:
+                                  is_queued: List[bool], on_rl_start: Callable,
+                                  on_rl_end: Callable) -> None:
         order_bdy_str = self._bybit_auth.get_order_auth_body(order=order)
         asyncio.create_task(
             coro=self.amend_bybit_order(order=order_bdy_str,
@@ -55,7 +53,8 @@ class Gateway:
                 await res.json()
 
     async def amend_bybit_order(self, order: str,
-                                is_queued: List[bool]) -> None:
+                                is_queued: List[bool], on_rl_start: Callable,
+                                on_rl_end: Callable) -> None:
         is_queued[0] = True
         async with aiohttp.ClientSession() as session:
             async with session.post(
@@ -65,15 +64,15 @@ class Gateway:
                 res_bdy = await res.json()
                 is_queued[0] = False
                 if (res_bdy.get('rate_limit_status') == 0
-                        and not self._strategy.is_rate_limited):
+                        and not self.is_rate_limited):
                     sleep_for = (res_bdy.get('rate_limit_reset_ms')
                                  - api_auth.get_milli_timestamp()) / 1000.0
                     if sleep_for > 0:
-                        self._strategy.is_rate_limited = True
-                        self._strategy.on_rate_limit_start()
+                        self.is_rate_limited = True
+                        on_rl_start()
                         await asyncio.sleep(delay=sleep_for)
-                        self._strategy.is_rate_limited = False
-                        self._strategy.on_rate_limit_end()
+                        self.is_rate_limited = False
+                        on_rl_end()
 
     @staticmethod
     async def cancel_all_bybit_order(order: str) -> None:
