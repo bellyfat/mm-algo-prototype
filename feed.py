@@ -23,6 +23,12 @@ class Feed:
     def on_position_snapshot(self, data: dict) -> None:
         pass
 
+    def on_book_reset(self):
+        pass
+
+    def on_depth_snapshot(self, data):
+        pass
+
 
 class BybitFeed(Feed):
     _order_book: BybitOrderBook

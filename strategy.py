@@ -12,11 +12,6 @@ def get_random_string(n):
 
 
 class Strategy:
-    _gateway = gateway.Gateway
-
-    def __init__(self, gw: gateway.Gateway) -> None:
-        self._gateway = gw
-
     @abstractmethod
     def on_bybit_bbo_chg(self, data: Tuple[float, float]) -> None:
         pass
@@ -33,7 +28,6 @@ class Strategy:
     def on_bybit_execution(self, data: dict) -> None:
         pass
 
-
     @abstractmethod
     def on_bybit_order_snap(self, data: dict) -> None:
         pass
@@ -44,6 +38,7 @@ class Strategy:
 
 
 class MMStrategy(Strategy):
+    _gateway = gateway.Gateway
     _bybit_bbo = []
     _binance_bbo = []
     _bybit_active_orders = {}
@@ -59,8 +54,8 @@ class MMStrategy(Strategy):
     is_bid_amend_queued = [False]
     is_ask_amend_queued = [False]
 
-    def __init__(self, gw: gateway.Gateway) -> None:
-        super().__init__(gw=gw)
+    def __init__(self, gateway: gateway.Gateway) -> None:
+        self._gateway = gateway
 
     def on_bybit_bbo_chg(self, data: Tuple[float, float]) -> None:
         self._bybit_bbo = list(data)
@@ -180,7 +175,7 @@ class MMStrategy(Strategy):
 
     def place_new_bybit_order(self, side: str) -> None:
         print('Place new order Bybit', side)
-        if not self._gateway.is_bybit_amend_limited:
+        if not self._gateway.is_rate_limited:
             if side == 'Buy':
                 self._bybit_bid_ord_link_id = get_random_string(n=36)
                 order = self.get_bybit_new_limit_order(
@@ -212,13 +207,15 @@ class MMStrategy(Strategy):
                 self._bybit_bid_ord_link_id)
             if (order_local is not None and not self.is_bid_amend_queued[0]
                     and order_local.get('price') != self._quote_targets[0]
-                    and not self._gateway.is_bybit_amend_limited):
+                    and not self._gateway.is_rate_limited):
                 print('Amend Buy')
                 order = self.get_bybit_order_cancel_replace(
                     order_link_id=self._bybit_bid_ord_link_id,
                     p_r_price_=str(self._quote_targets[0]))
                 self._gateway.prepare_bybit_amend_order(
-                    order=order, is_queued=self.is_bid_amend_queued)
+                    order=order, is_queued=self.is_bid_amend_queued,
+                    on_rl_start=self.on_rate_limit_start,
+                    on_rl_end=self.on_rate_limit_end)
         elif self._bybit_position == 0:
             self.place_new_bybit_order(side='Buy')
         if self._bybit_ask_ord_link_id is not None:
@@ -226,12 +223,29 @@ class MMStrategy(Strategy):
                 self._bybit_ask_ord_link_id)
             if (order_local is not None and not self.is_ask_amend_queued[0]
                     and order_local.get('price') != self._quote_targets[1]
-                    and not self._gateway.is_bybit_amend_limited):
+                    and not self._gateway.is_rate_limited):
                 print('Amend Sell')
                 order = self.get_bybit_order_cancel_replace(
                     order_link_id=self._bybit_ask_ord_link_id,
                     p_r_price_=str(self._quote_targets[1]))
                 self._gateway.prepare_bybit_amend_order(
-                    order=order, is_queued=self.is_ask_amend_queued)
+                    order=order, is_queued=self.is_ask_amend_queued,
+                    on_rl_start=self.on_rate_limit_start,
+                    on_rl_end=self.on_rate_limit_end)
         elif self._bybit_position == 0:
+            self.place_new_bybit_order(side='Sell')
+
+    def on_rate_limit_start(self) -> None:
+        print('Rate Limit Start')
+        self._gateway.prepare_bybit_cancel_all_order(
+            order=OrderedDict({'symbol': self._bybit_symbol}))
+
+    def on_rate_limit_end(self) -> None:
+        print('Rate Limit End')
+        if self._bybit_position == 0:
+            self.place_new_bybit_order(side='Buy')
+            self.place_new_bybit_order(side='Sell')
+        elif self._bybit_position < 0:
+            self.place_new_bybit_order(side='Buy')
+        elif self._bybit_position > 0:
             self.place_new_bybit_order(side='Sell')
