@@ -67,10 +67,11 @@ class Gateway:
                 is_queued[0] = False
                 if (res_bdy.get('rate_limit_status') == 0
                         and not self.is_rate_limited):
-                    sleep_for = (res_bdy.get('rate_limit_reset_ms')
-                                 - api_auth.get_milli_timestamp()) / 1000.0
                     self.is_rate_limited = True
                     on_rl_start()
+                    sleep_for = (res_bdy.get('rate_limit_reset_ms')
+                                 - api_auth.get_milli_timestamp()) / 1000.0
+                    print(sleep_for)
                     await asyncio.sleep(delay=sleep_for)
                     self.is_rate_limited = False
                     on_rl_end()
