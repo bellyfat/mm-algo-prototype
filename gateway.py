@@ -69,12 +69,11 @@ class Gateway:
                         and not self.is_rate_limited):
                     sleep_for = (res_bdy.get('rate_limit_reset_ms')
                                  - api_auth.get_milli_timestamp()) / 1000.0
-                    if sleep_for > 0:
-                        self.is_rate_limited = True
-                        on_rl_start()
-                        await asyncio.sleep(delay=sleep_for)
-                        self.is_rate_limited = False
-                        on_rl_end()
+                    self.is_rate_limited = True
+                    on_rl_start()
+                    await asyncio.sleep(delay=sleep_for)
+                    self.is_rate_limited = False
+                    on_rl_end()
 
     @staticmethod
     async def cancel_all_bybit_order(order: str) -> None:
@@ -83,4 +82,4 @@ class Gateway:
                     url='https://api.bybit.com/v2/private/order/cancelAll',
                     data=order, headers={'Content-Type': 'application/json'},
                     ssl=True) as res:
-                await res.json()
+                print(await res.json())
