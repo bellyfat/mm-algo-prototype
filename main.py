@@ -13,8 +13,9 @@ async def run_async(*args: Coroutine) -> None:
     await asyncio.gather(*args)
 
 if __name__ == '__main__':
-    gw = gateway.Gateway()
-    strategy = strategy.MMStrategy(gateway=gateway.Gateway)
+    gw = gateway.Gateway(api_pth_bybit=API_KEY_PATH_BYBIT,
+                         api_pth_binance=API_KEY_PATH_BINANCE)
+    strategy = strategy.MMStrategy(gateway=gw)
     bybit_feed = BybitFeed(strat=strategy)
     binance_feed = BinanceFeed(strat=strategy)
     bybit_ws_client = BybitWsClient(api_file_path=API_KEY_PATH_BYBIT,
