@@ -47,7 +47,7 @@ class MMStrategy(Strategy):
     _bybit_position = 0
     _minimum_quotes = []
     _quote_targets = []
-    _NET_FEE_OFFSET = 0.0004
+    _NET_FEE_OFFSET = 0.00015
     _bybit_symbol = 'BTCUSD'
     _binance_symbol = 'BTCUSD_PERP'
     _bybit_quote_size = 100
