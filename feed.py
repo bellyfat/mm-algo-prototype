@@ -5,7 +5,7 @@ import strategy
 
 
 class Feed:
-    _last_bbo_: Tuple[float, float]
+    _last_bbo: Tuple[float, float]
     _strategy: strategy.Strategy
 
     def __init__(self, strat: strategy.Strategy) -> None:
@@ -21,6 +21,12 @@ class Feed:
 
     @abstractmethod
     def on_position_snapshot(self, data: dict) -> None:
+        pass
+
+    def on_book_reset(self):
+        pass
+
+    def on_depth_snapshot(self, data):
         pass
 
 
@@ -45,14 +51,14 @@ class BybitFeed(Feed):
             curr_bbo = (self._order_book.bids[0][0],
                         self._order_book.asks[0][0])
             self._strategy.on_bybit_bbo_chg(data=curr_bbo)
-            self._last_bbo_ = curr_bbo
+            self._last_bbo = curr_bbo
         else:
             self._order_book.handle_delta(delta_message=data)
             curr_bbo = (self._order_book.bids[0][0],
                         self._order_book.asks[0][0])
-            if curr_bbo != self._last_bbo_:
+            if curr_bbo != self._last_bbo:
                 self._strategy.on_bybit_bbo_chg(data=curr_bbo)
-            self._last_bbo_ = curr_bbo
+            self._last_bbo = curr_bbo
 
     def on_order_snapshot(self, data: dict) -> None:
         self._strategy.on_bybit_order_snap(data=data)
@@ -100,9 +106,9 @@ class BinanceFeed(Feed):
             self._order_book.parse_update(depth_update=data)
             curr_bbo = (self._order_book.bids[0][0],
                         self._order_book.asks[0][0])
-            if curr_bbo != self._last_bbo_:
+            if curr_bbo != self._last_bbo:
                 self._strategy.on_binance_bbo_chg(data=curr_bbo)
-            self._last_bbo_ = curr_bbo
+            self._last_bbo = curr_bbo
 
     def handle_book_snapshot(self, data: dict) -> None:
         self._order_book = BinanceOrderBook(depth_snapshot=data)
@@ -113,7 +119,7 @@ class BinanceFeed(Feed):
         curr_bbo = (self._order_book.bids[0][0],
                     self._order_book.asks[0][0])
         self._strategy.on_binance_bbo_chg(data=curr_bbo)
-        self._last_bbo_ = curr_bbo
+        self._last_bbo = curr_bbo
 
     def remove_prior_depth_updates(self, depth_snapshot: dict):
         removed_updates = []
