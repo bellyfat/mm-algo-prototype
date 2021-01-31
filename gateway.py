@@ -8,7 +8,7 @@ import asyncio
 class Gateway:
     _bybit_auth: api_auth.BybitApiAuth
     _binance_auth: api_auth.BinanceApiAuth
-    is_rate_limited: bool
+    is_rate_limited = False
 
     def __init__(self, api_pth_bybit: str, api_pth_binance: str) -> None:
         self._bybit_auth = api_auth.BybitApiAuth(file_path=api_pth_bybit)
@@ -29,7 +29,9 @@ class Gateway:
         order_bdy_str = self._bybit_auth.get_order_auth_body(order=order)
         asyncio.create_task(
             coro=self.amend_bybit_order(order=order_bdy_str,
-                                        is_queued=is_queued))
+                                        is_queued=is_queued,
+                                        on_rl_start=on_rl_start,
+                                        on_rl_end=on_rl_end))
 
     def prepare_bybit_cancel_all_order(self, order: OrderedDict) -> None:
         order_bdy_str = self._bybit_auth.get_order_auth_body(order=order)
