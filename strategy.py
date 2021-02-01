@@ -49,6 +49,7 @@ class MMStrategy(Strategy):
     _minimum_quotes = []
     _quote_targets = []
     _NET_FEE_OFFSET = 0.00015
+    _bybit_eff_ticks = 10
     _bybit_tick_size = 0.5
     _bybit_symbol = 'BTCUSD'
     _binance_symbol = 'BTCUSD_PERP'
@@ -205,8 +206,8 @@ class MMStrategy(Strategy):
     def compute_quote_targets(self) -> None:
         bybit_mid_price = np.mean(a=self._bybit_bbo)
         self._bybit_effective_prices = [
-            bybit_mid_price - 3 * self._bybit_tick_size,
-            bybit_mid_price + 3 * self._bybit_tick_size]
+            bybit_mid_price - self._bybit_eff_ticks * self._bybit_tick_size,
+            bybit_mid_price + self._bybit_eff_ticks * self._bybit_tick_size]
 
         average_price = np.mean(a=self._bybit_bbo + self._binance_bbo)
         self._minimum_quotes = [
@@ -257,7 +258,7 @@ class MMStrategy(Strategy):
                         order_link_id=self._bybit_bid_ord_link_id)
                     self._gateway.prepare_bybit_cancel_order(
                         order=order, is_queued=self.is_bid_cancel_queued)
-        elif self._bybit_position == 0:
+        elif self._bybit_position <= 0:
             self.place_new_bybit_order(side='Buy')
         if self._bybit_ask_ord_link_id is not None:
             order_local = self._bybit_active_orders.get(
@@ -278,5 +279,5 @@ class MMStrategy(Strategy):
                         order_link_id=self._bybit_ask_ord_link_id)
                     self._gateway.prepare_bybit_cancel_order(
                         order=order, is_queued=self.is_ask_cancel_queued)
-        elif self._bybit_position == 0:
+        elif self._bybit_position >= 0:
             self.place_new_bybit_order(side='Sell')
