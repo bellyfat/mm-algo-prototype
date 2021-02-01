@@ -199,9 +199,6 @@ class MMStrategy(Strategy):
             * max((self._bybit_bbo[1], self._binance_bbo[1])) * 2) / 2)
 
     def check_new_quotes(self) -> None:
-        #print('QUOTES:', self._quote_targets[0], '@', self._quote_targets[1],
-              #';', 'BINANCE:',  self._binance_bbo[0], '@', self._binance_bbo[1],
-              #';', 'BYBIT:',  self._bybit_bbo[0], '@', self._bybit_bbo[1])
         if self._bybit_bid_ord_link_id is not None:
             order_local = self._bybit_active_orders.get(
                 self._bybit_bid_ord_link_id)

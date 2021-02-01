@@ -36,10 +36,10 @@ class WsClient:
         try:
             async with websockets.connect(uri=uri,
                                           ssl=self._ssl_context) as websocket:
-                await websocket.send(message=self._sub_message)
                 try:
+                    await websocket.send(message=self._sub_message)
                     await self.on_connect(websocket=websocket)
-                except websockets.ConnectionClosed:
+                except:
                     self.on_disconnect()
                     await self.start()
         except websockets.InvalidHandshake:
@@ -165,7 +165,10 @@ class BybitWsClient(WsClient):
     async def heartbeat(self,
                         websocket: websockets.WebSocketClientProtocol) -> None:
         while True:
-            await websocket.send(message=self._ping_msg)
+            try:
+                await websocket.send(message=self._ping_msg)
+            except:
+                await self.start()
             await asyncio.sleep(delay=30)
             if not self._pong_recv:
                 raise Exception('Bybit: no pong received.')
