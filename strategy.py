@@ -210,9 +210,7 @@ class MMStrategy(Strategy):
                     order_link_id=self._bybit_bid_ord_link_id,
                     p_r_price_=str(self._quote_targets[0]))
                 self._gateway.prepare_bybit_amend_order(
-                    order=order, is_queued=self.is_bid_amend_queued,
-                    on_rl_start=self.on_rate_limit_start,
-                    on_rl_end=self.on_rate_limit_end)
+                    order=order, is_queued=self.is_bid_amend_queued)
         elif self._bybit_position == 0:
             self.place_new_bybit_order(side='Buy')
         if self._bybit_ask_ord_link_id is not None:
@@ -226,23 +224,6 @@ class MMStrategy(Strategy):
                     order_link_id=self._bybit_ask_ord_link_id,
                     p_r_price_=str(self._quote_targets[1]))
                 self._gateway.prepare_bybit_amend_order(
-                    order=order, is_queued=self.is_ask_amend_queued,
-                    on_rl_start=self.on_rate_limit_start,
-                    on_rl_end=self.on_rate_limit_end)
+                    order=order, is_queued=self.is_ask_amend_queued)
         elif self._bybit_position == 0:
-            self.place_new_bybit_order(side='Sell')
-
-    def on_rate_limit_start(self) -> None:
-        print('Rate Limit Start')
-        self._gateway.prepare_bybit_cancel_all_order(
-            order=OrderedDict({'symbol': self._bybit_symbol}))
-
-    def on_rate_limit_end(self) -> None:
-        print('Rate Limit End')
-        if self._bybit_position == 0:
-            self.place_new_bybit_order(side='Buy')
-            self.place_new_bybit_order(side='Sell')
-        elif self._bybit_position < 0:
-            self.place_new_bybit_order(side='Buy')
-        elif self._bybit_position > 0:
             self.place_new_bybit_order(side='Sell')

@@ -24,19 +24,11 @@ class Gateway:
             coro=self.send_binance_new_order(order=order_bdy_str))
 
     def prepare_bybit_amend_order(self, order: OrderedDict,
-                                  is_queued: List[bool], on_rl_start: Callable,
-                                  on_rl_end: Callable) -> None:
+                                  is_queued: List[bool]) -> None:
         order_bdy_str = self._bybit_auth.get_order_auth_body(order=order)
         asyncio.create_task(
             coro=self.amend_bybit_order(order=order_bdy_str,
-                                        is_queued=is_queued,
-                                        on_rl_start=on_rl_start,
-                                        on_rl_end=on_rl_end))
-
-    def prepare_bybit_cancel_all_order(self, order: OrderedDict) -> None:
-        order_bdy_str = self._bybit_auth.get_order_auth_body(order=order)
-        asyncio.create_task(
-            coro=self.cancel_all_bybit_order(order=order_bdy_str))
+                                        is_queued=is_queued))
 
     @staticmethod
     async def send_bybit_new_order(order: str) -> None:
@@ -55,8 +47,7 @@ class Gateway:
                 await res.json()
 
     async def amend_bybit_order(self, order: str,
-                                is_queued: List[bool], on_rl_start: Callable,
-                                on_rl_end: Callable) -> None:
+                                is_queued: List[bool]) -> None:
         is_queued[0] = True
         async with aiohttp.ClientSession() as session:
             async with session.post(
@@ -71,17 +62,6 @@ class Gateway:
                                  - api_auth.get_milli_timestamp()) / 1000.0
                     if sleep_for > 0:
                         self.is_rate_limited = True
-                        on_rl_start()
                         print(sleep_for)
                         await asyncio.sleep(delay=sleep_for)
                         self.is_rate_limited = False
-                        on_rl_end()
-
-    @staticmethod
-    async def cancel_all_bybit_order(order: str) -> None:
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                    url='https://api.bybit.com/v2/private/order/cancelAll',
-                    data=order, headers={'Content-Type': 'application/json'},
-                    ssl=True) as res:
-                print(await res.json())
