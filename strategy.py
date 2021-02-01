@@ -45,12 +45,16 @@ class MMStrategy(Strategy):
     _bybit_bid_ord_link_id = None
     _bybit_ask_ord_link_id = None
     _bybit_position = 0
+    _bybit_effective_prices = []
     _minimum_quotes = []
     _quote_targets = []
     _NET_FEE_OFFSET = 0.00015
+    _bybit_tick_size = 0.5
     _bybit_symbol = 'BTCUSD'
     _binance_symbol = 'BTCUSD_PERP'
     _bybit_quote_size = 100
+    is_bid_cancel_queued = [False]
+    is_ask_cancel_queued = [False]
     is_bid_amend_queued = [False]
     is_ask_amend_queued = [False]
 
@@ -116,8 +120,10 @@ class MMStrategy(Strategy):
 
     def on_cancel(self, order: dict) -> None:
         if self._bybit_bid_ord_link_id == order.get('order_link_id'):
+            self._bybit_bid_ord_link_id = None
             self.place_new_bybit_order(side='Buy')
         elif self._bybit_ask_ord_link_id == order.get('order_link_id'):
+            self._bybit_ask_ord_link_id = None
             self.place_new_bybit_order(side='Sell')
 
     @staticmethod
@@ -173,16 +179,23 @@ class MMStrategy(Strategy):
                             'p_r_price': p_r_price_,
                             'symbol': self._bybit_symbol})
 
+    def get_bybit_order_cancel(self, order_link_id: str) -> OrderedDict:
+        return OrderedDict({'order_link_id': order_link_id,
+                            'symbol': self._bybit_symbol})
+
     def place_new_bybit_order(self, side: str) -> None:
-        print('Place new order Bybit', side)
         if not self._gateway.is_rate_limited:
-            if side == 'Buy':
+            if (side == 'Buy' and
+                    self._quote_targets[0] >= self._bybit_effective_prices[0]):
+                print('Place new order Bybit Buy')
                 self._bybit_bid_ord_link_id = get_random_string(n=36)
                 order = self.get_bybit_new_limit_order(
                     order_link_id=self._bybit_bid_ord_link_id,
                     price=self._quote_targets[0], side=side)
                 self._gateway.prepare_bybit_new_order(order=order)
-            elif side == 'Sell':
+            elif (side == 'Sell' and
+                  self._quote_targets[1] <= self._bybit_effective_prices[1]):
+                print('Place new order Bybit Sell')
                 self._bybit_ask_ord_link_id = get_random_string(n=36)
                 order = self.get_bybit_new_limit_order(
                     order_link_id=self._bybit_ask_ord_link_id,
@@ -190,6 +203,11 @@ class MMStrategy(Strategy):
                 self._gateway.prepare_bybit_new_order(order=order)
 
     def compute_quote_targets(self) -> None:
+        bybit_mid_price = np.mean(a=self._bybit_bbo)
+        self._bybit_effective_prices = [
+            bybit_mid_price - 3 * self._bybit_tick_size,
+            bybit_mid_price + 3 * self._bybit_tick_size]
+
         average_price = np.mean(a=self._bybit_bbo + self._binance_bbo)
         self._minimum_quotes = [
             np.floor((1 - self._NET_FEE_OFFSET) * average_price * 2) / 2,
@@ -199,17 +217,16 @@ class MMStrategy(Strategy):
         if self._minimum_quotes[0] > self._bybit_bbo[0]:
             # Adjust quoted bid to current Bybit best bid
             self._quote_targets[0] = self._bybit_bbo[0]
-
         # Else, check if maximum bid is still above best offer on Binance
         # (If we get hit on the bid, we want to take the Binance offer)
         elif self._minimum_quotes[0] > self._binance_bbo[1]:
             # Adjust quoted bid to current Binance best offer
             self._quote_targets[0] = np.floor(self._binance_bbo[1] * 2) / 2
+
         # Check if minimum offer is below current Bybit best offer
         if self._minimum_quotes[1] < self._bybit_bbo[1]:
             # Adjust quoted offer to current Bybit best offer
             self._quote_targets[1] = self._bybit_bbo[1]
-
         # Else, check if minimum offer is still below best bid on Binance
         # (If we get lifted on the offer, we want to take the Binance bid)
         elif self._minimum_quotes[1] < self._binance_bbo[0]:
@@ -217,18 +234,29 @@ class MMStrategy(Strategy):
             self._quote_targets[1] = np.ceil(self._binance_bbo[0] * 2) / 2
 
     def check_new_quotes(self) -> None:
+       # print('EFF:', self._bybit_effective_prices[0], '@',
+              #self._bybit_effective_prices[1], '; BYBIT:', self._bybit_bbo[0], '@',
+              #self._bybit_bbo[1], '; BINANCE:',
+              #self._binance_bbo[0], '@', self._binance_bbo[1])
         if self._bybit_bid_ord_link_id is not None:
             order_local = self._bybit_active_orders.get(
                 self._bybit_bid_ord_link_id)
             if (order_local is not None and not self.is_bid_amend_queued[0]
                     and order_local.get('price') != self._quote_targets[0]
                     and not self._gateway.is_rate_limited):
-                print('Amend Buy')
-                order = self.get_bybit_order_cancel_replace(
-                    order_link_id=self._bybit_bid_ord_link_id,
-                    p_r_price_=str(self._quote_targets[0]))
-                self._gateway.prepare_bybit_amend_order(
-                    order=order, is_queued=self.is_bid_amend_queued)
+                if self._quote_targets[0] >= self._bybit_effective_prices[0]:
+                    print('Amend Buy')
+                    order = self.get_bybit_order_cancel_replace(
+                        order_link_id=self._bybit_bid_ord_link_id,
+                        p_r_price_=str(self._quote_targets[0]))
+                    self._gateway.prepare_bybit_amend_order(
+                        order=order, is_queued=self.is_bid_amend_queued)
+                elif not self.is_bid_cancel_queued[0]:
+                    print('Cancel Buy')
+                    order = self.get_bybit_order_cancel(
+                        order_link_id=self._bybit_bid_ord_link_id)
+                    self._gateway.prepare_bybit_cancel_order(
+                        order=order, is_queued=self.is_bid_cancel_queued)
         elif self._bybit_position == 0:
             self.place_new_bybit_order(side='Buy')
         if self._bybit_ask_ord_link_id is not None:
@@ -237,11 +265,18 @@ class MMStrategy(Strategy):
             if (order_local is not None and not self.is_ask_amend_queued[0]
                     and order_local.get('price') != self._quote_targets[1]
                     and not self._gateway.is_rate_limited):
-                print('Amend Sell')
-                order = self.get_bybit_order_cancel_replace(
-                    order_link_id=self._bybit_ask_ord_link_id,
-                    p_r_price_=str(self._quote_targets[1]))
-                self._gateway.prepare_bybit_amend_order(
-                    order=order, is_queued=self.is_ask_amend_queued)
+                if self._quote_targets[1] <= self._bybit_effective_prices[1]:
+                    print('Amend Sell')
+                    order = self.get_bybit_order_cancel_replace(
+                        order_link_id=self._bybit_ask_ord_link_id,
+                        p_r_price_=str(self._quote_targets[1]))
+                    self._gateway.prepare_bybit_amend_order(
+                        order=order, is_queued=self.is_ask_amend_queued)
+                elif not self.is_ask_cancel_queued[0]:
+                    print('Cancel Sell')
+                    order = self.get_bybit_order_cancel(
+                        order_link_id=self._bybit_ask_ord_link_id)
+                    self._gateway.prepare_bybit_cancel_order(
+                        order=order, is_queued=self.is_ask_cancel_queued)
         elif self._bybit_position == 0:
             self.place_new_bybit_order(side='Sell')

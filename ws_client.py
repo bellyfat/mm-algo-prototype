@@ -171,6 +171,6 @@ class BybitWsClient(WsClient):
                 await self.start()
             await asyncio.sleep(delay=30)
             if not self._pong_recv:
-                raise Exception('Bybit: no pong received.')
+                await self.start()
             else:
                 self._pong_recv = False
