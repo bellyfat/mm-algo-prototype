@@ -25,6 +25,7 @@ class Gateway:
 
     def prepare_bybit_amend_order(self, order: OrderedDict,
                                   is_queued: List[bool]) -> None:
+        is_queued[0] = True
         order_bdy_str = self._bybit_auth.get_order_auth_body(order=order)
         asyncio.create_task(
             coro=self.amend_bybit_order(order=order_bdy_str,
@@ -48,7 +49,6 @@ class Gateway:
 
     async def amend_bybit_order(self, order: str,
                                 is_queued: List[bool]) -> None:
-        is_queued[0] = True
         async with aiohttp.ClientSession() as session:
             async with session.post(
                     url='https://api.bybit.com/v2/private/order/replace',
