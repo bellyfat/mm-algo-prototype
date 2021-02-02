@@ -36,8 +36,12 @@ class WsClient:
         try:
             async with websockets.connect(uri=uri,
                                           ssl=self._ssl_context) as websocket:
-                await websocket.send(message=self._sub_message)
-                await self.on_connect(websocket=websocket)
+                try:
+                    await websocket.send(message=self._sub_message)
+                    await self.on_connect(websocket=websocket)
+                except websockets.ConnectionClosed as e:
+                    print(e)
+                    await self.start()
         except websockets.InvalidHandshake as e:
             print(e)
             await self.start()
@@ -171,9 +175,13 @@ class BybitWsClient(WsClient):
     async def heartbeat(self,
                         websocket: websockets.WebSocketClientProtocol) -> None:
         while True:
-            await websocket.send(message=self._ping_msg)
-            await asyncio.sleep(delay=30)
-            if not self._pong_recv:
+            try:
+                await websocket.send(message=self._ping_msg)
+                await asyncio.sleep(delay=30)
+                if not self._pong_recv:
+                    await self.start()
+                else:
+                    self._pong_recv = False
+            except websockets.ConnectionClosed as e:
+                print(e)
                 await self.start()
-            else:
-                self._pong_recv = False
