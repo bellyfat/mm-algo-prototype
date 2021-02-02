@@ -36,13 +36,10 @@ class WsClient:
         try:
             async with websockets.connect(uri=uri,
                                           ssl=self._ssl_context) as websocket:
-                try:
-                    await websocket.send(message=self._sub_message)
-                    await self.on_connect(websocket=websocket)
-                except websockets.WebSocketException:
-                    self.on_disconnect()
-                    await self.start()
-        except websockets.WebSocketException:
+                await websocket.send(message=self._sub_message)
+                await self.on_connect(websocket=websocket)
+        except websockets.InvalidHandshake as e:
+            print(e)
             await self.start()
 
     async def http_get(self, uri: str, **kwargs) -> dict:
@@ -111,12 +108,17 @@ class BinanceWsClient(WsClient):
     async def on_connect(self,
                          websocket: websockets.WebSocketClientProtocol) -> None:
         while True:
-            res = json.loads(s=await websocket.recv())
-            self._feed.on_websocket(data=res)
-            if res.get('result') is None and res.get('id') == 1:
-                asyncio.create_task(coro=self.get_depth_snapshot())
-                asyncio.create_task(coro=self.get_open_orders())
-                asyncio.create_task(coro=self.get_positions())
+            try:
+                res = json.loads(s=await websocket.recv())
+                self._feed.on_websocket(data=res)
+                if res.get('result') is None and res.get('id') == 1:
+                    asyncio.create_task(coro=self.get_depth_snapshot())
+                    asyncio.create_task(coro=self.get_open_orders())
+                    asyncio.create_task(coro=self.get_positions())
+            except websockets.ConnectionClosed as e:
+                print(e)
+                self.on_disconnect()
+                await self.start()
 
 
 class BybitWsClient(WsClient):
@@ -152,23 +154,24 @@ class BybitWsClient(WsClient):
                          websocket: websockets.WebSocketClientProtocol) -> None:
         asyncio.create_task(coro=self.heartbeat(websocket=websocket))
         while True:
-            res = json.loads(s=await websocket.recv())
-            if res.get('topic') is not None:
-                self._feed.on_websocket(data=res)
-            elif (res.get('request').get('op') == 'subscribe'
-                  and res.get('success') is True):
-                asyncio.create_task(coro=self.get_active_orders())
-                asyncio.create_task(coro=self.get_positions())
-            elif res.get('ret_msg') == 'pong' and res.get('success'):
-                self._pong_recv = True
+            try:
+                res = json.loads(s=await websocket.recv())
+                if res.get('topic') is not None:
+                    self._feed.on_websocket(data=res)
+                elif (res.get('request').get('op') == 'subscribe'
+                      and res.get('success') is True):
+                    asyncio.create_task(coro=self.get_active_orders())
+                    asyncio.create_task(coro=self.get_positions())
+                elif res.get('ret_msg') == 'pong' and res.get('success'):
+                    self._pong_recv = True
+            except websockets.ConnectionClosed as e:
+                print(e)
+                await self.start()
 
     async def heartbeat(self,
                         websocket: websockets.WebSocketClientProtocol) -> None:
         while True:
-            try:
-                await websocket.send(message=self._ping_msg)
-            except websockets.WebSocketException:
-                await self.start()
+            await websocket.send(message=self._ping_msg)
             await asyncio.sleep(delay=30)
             if not self._pong_recv:
                 await self.start()
