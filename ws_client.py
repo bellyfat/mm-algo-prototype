@@ -39,10 +39,10 @@ class WsClient:
                 try:
                     await websocket.send(message=self._sub_message)
                     await self.on_connect(websocket=websocket)
-                except:
+                except websockets.WebSocketException:
                     self.on_disconnect()
                     await self.start()
-        except websockets.InvalidHandshake:
+        except websockets.WebSocketException:
             await self.start()
 
     async def http_get(self, uri: str, **kwargs) -> dict:
@@ -167,7 +167,7 @@ class BybitWsClient(WsClient):
         while True:
             try:
                 await websocket.send(message=self._ping_msg)
-            except:
+            except websockets.WebSocketException:
                 await self.start()
             await asyncio.sleep(delay=30)
             if not self._pong_recv:

@@ -48,11 +48,13 @@ class MMStrategy(Strategy):
     _minimum_quotes = []
     _quote_targets = []
     _NET_FEE_OFFSET = 0.00015
+    _NET_PROFIT_OFFSET = 0.00005
     _bybit_symbol = 'BTCUSD'
     _binance_symbol = 'BTCUSD_PERP'
     _bybit_quote_size = 100
     is_bid_amend_queued = [False]
     is_ask_amend_queued = [False]
+    _inventory_limit = 1000
 
     def __init__(self, gateway: gateway.Gateway) -> None:
         self._gateway = gateway
@@ -192,10 +194,10 @@ class MMStrategy(Strategy):
     def compute_quote_targets(self) -> None:
         self._quote_targets.clear()
         self._quote_targets.append(np.floor(
-            (1 - self._NET_FEE_OFFSET)
+            (1 - self._NET_FEE_OFFSET + self._NET_PROFIT_OFFSET)
             * min((self._bybit_bbo[0], self._binance_bbo[0])) * 2) / 2)
         self._quote_targets.append(np.ceil(
-            (1 + self._NET_FEE_OFFSET)
+            (1 + self._NET_FEE_OFFSET + self._NET_PROFIT_OFFSET)
             * max((self._bybit_bbo[1], self._binance_bbo[1])) * 2) / 2)
 
     def check_new_quotes(self) -> None:
@@ -211,7 +213,7 @@ class MMStrategy(Strategy):
                     p_r_price_=str(self._quote_targets[0]))
                 self._gateway.prepare_bybit_amend_order(
                     order=order, is_queued=self.is_bid_amend_queued)
-        elif self._bybit_position == 0:
+        elif self._bybit_position != self._inventory_limit:
             self.place_new_bybit_order(side='Buy')
         if self._bybit_ask_ord_link_id is not None:
             order_local = self._bybit_active_orders.get(
@@ -225,5 +227,5 @@ class MMStrategy(Strategy):
                     p_r_price_=str(self._quote_targets[1]))
                 self._gateway.prepare_bybit_amend_order(
                     order=order, is_queued=self.is_ask_amend_queued)
-        elif self._bybit_position == 0:
+        elif self._bybit_position != -self._inventory_limit:
             self.place_new_bybit_order(side='Sell')
