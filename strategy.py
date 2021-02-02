@@ -143,9 +143,6 @@ class MMStrategy(Strategy):
             if execution.get('leaves_qty') == 0:
                 self._bybit_bid_ord_link_id = None
                 print('FILLED BUY', self._bybit_position)
-                if self._bybit_position == 0:
-                    self.place_new_bybit_order(side='Buy')
-                    self.place_new_bybit_order(side='Sell')
 
     def on_sell_trade(self, execution: dict) -> None:
         hedge_qty = self.get_hedge_qty(execution=execution)
@@ -156,9 +153,6 @@ class MMStrategy(Strategy):
             if execution.get('leaves_qty') == 0:
                 self._bybit_ask_ord_link_id = None
                 print('FILLED SELL', self._bybit_position)
-                if self._bybit_position == 0:
-                    self.place_new_bybit_order(side='Buy')
-                    self.place_new_bybit_order(side='Sell')
 
     def get_bybit_new_limit_order(self, order_link_id: str, price: float,
                                   side: str) -> OrderedDict:
@@ -181,13 +175,13 @@ class MMStrategy(Strategy):
     def place_new_bybit_order(self, side: str) -> None:
         print('Place new order Bybit', side)
         if not self._gateway.is_rate_limited:
-            if side == 'Buy':
+            if side == 'Buy' and self._bybit_bid_ord_link_id is None:
                 self._bybit_bid_ord_link_id = get_random_string(n=36)
                 order = self.get_bybit_new_limit_order(
                     order_link_id=self._bybit_bid_ord_link_id,
                     price=self._quote_targets[0], side=side)
                 self._gateway.prepare_bybit_new_order(order=order)
-            elif side == 'Sell':
+            elif side == 'Sell' and self._bybit_ask_ord_link_id is None:
                 self._bybit_ask_ord_link_id = get_random_string(n=36)
                 order = self.get_bybit_new_limit_order(
                     order_link_id=self._bybit_ask_ord_link_id,
