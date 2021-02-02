@@ -183,7 +183,7 @@ class MMStrategy(Strategy):
                     price=self._quote_targets[0], side=side)
                 self._gateway.prepare_bybit_new_order(order=order)
             elif side == 'Sell' and self._bybit_ask_ord_link_id is None:
-                print('Place new order sell (Bybit')
+                print('Place new order sell (Bybit)')
                 self._bybit_ask_ord_link_id = get_random_string(n=36)
                 order = self.get_bybit_new_limit_order(
                     order_link_id=self._bybit_ask_ord_link_id,
@@ -193,7 +193,7 @@ class MMStrategy(Strategy):
     def compute_quote_targets(self) -> None:
         self._quote_targets.clear()
         self._quote_targets.append(np.floor(
-            (1 - self._NET_FEE_OFFSET + self._NET_PROFIT_OFFSET)
+            (1 - self._NET_FEE_OFFSET - self._NET_PROFIT_OFFSET)
             * min((self._bybit_bbo[0], self._binance_bbo[0])) * 2) / 2)
         self._quote_targets.append(np.ceil(
             (1 + self._NET_FEE_OFFSET + self._NET_PROFIT_OFFSET)
