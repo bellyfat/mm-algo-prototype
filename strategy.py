@@ -83,14 +83,14 @@ class MMStrategy(Strategy):
                     or order_status == 'PartiallyFilled'
                     or order_status == 'PendingCancel'):
                 self._bybit_active_orders[ord_link_id] = order
-            elif order_status == 'Rejected' or order_status == 'Filled':
+            elif order_status == 'Filled':
                 if ord_link_id in self._bybit_active_orders:
                     self._bybit_active_orders.pop(ord_link_id)
-            elif order_status == 'Cancelled':
-                print('Cancelled')
+            elif order_status == 'Cancelled' or order_status == 'Rejected':
+                print(order_status)
                 if ord_link_id in self._bybit_active_orders:
                     self._bybit_active_orders.pop(ord_link_id)
-                self.on_cancel(order=order)
+                self.on_cancel_or_reject(order=order)
 
     def on_bybit_execution(self, data: dict) -> None:
         execs = data.get('data')
@@ -120,11 +120,11 @@ class MMStrategy(Strategy):
         self._bybit_position = (
             size if side == 'Long' or side == 'None' else -size)
 
-    def on_cancel(self, order: dict) -> None:
+    def on_cancel_or_reject(self, order: dict) -> None:
         if self._bybit_bid_ord_link_id == order.get('order_link_id'):
-            self.place_new_bybit_order(side='Buy')
+            self._bybit_bid_ord_link_id = None
         elif self._bybit_ask_ord_link_id == order.get('order_link_id'):
-            self.place_new_bybit_order(side='Sell')
+            self._bybit_ask_ord_link_id = None
 
     @staticmethod
     def get_hedge_qty(execution: dict) -> int:
@@ -207,7 +207,7 @@ class MMStrategy(Strategy):
                     and not self._gateway.is_rate_limited):
                 self._bid_update_count += 1
                 if self._bid_update_count == self._UPDATE_INTERVAL:
-                    print('Amend Buy')
+                    print('Amend Buy', len(self._bybit_active_orders))
                     order = self.get_bybit_order_cancel_replace(
                         order_link_id=self._bybit_bid_ord_link_id,
                         p_r_price_=str(self._quote_targets[0]))
@@ -224,7 +224,7 @@ class MMStrategy(Strategy):
                     and not self._gateway.is_rate_limited):
                 self._ask_update_count += 1
                 if self._ask_update_count == self._UPDATE_INTERVAL:
-                    print('Amend Sell')
+                    print('Amend Sell', len(self._bybit_active_orders))
                     order = self.get_bybit_order_cancel_replace(
                         order_link_id=self._bybit_ask_ord_link_id,
                         p_r_price_=str(self._quote_targets[1]))
