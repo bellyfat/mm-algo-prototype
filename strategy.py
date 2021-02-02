@@ -174,15 +174,16 @@ class MMStrategy(Strategy):
                             'symbol': self._bybit_symbol})
 
     def place_new_bybit_order(self, side: str) -> None:
-        print('Place new order Bybit', side)
         if not self._gateway.is_rate_limited:
             if side == 'Buy' and self._bybit_bid_ord_link_id is None:
+                print('Place new order buy (Bybit)')
                 self._bybit_bid_ord_link_id = get_random_string(n=36)
                 order = self.get_bybit_new_limit_order(
                     order_link_id=self._bybit_bid_ord_link_id,
                     price=self._quote_targets[0], side=side)
                 self._gateway.prepare_bybit_new_order(order=order)
             elif side == 'Sell' and self._bybit_ask_ord_link_id is None:
+                print('Place new order sell (Bybit')
                 self._bybit_ask_ord_link_id = get_random_string(n=36)
                 order = self.get_bybit_new_limit_order(
                     order_link_id=self._bybit_ask_ord_link_id,
@@ -214,7 +215,8 @@ class MMStrategy(Strategy):
                     self._gateway.prepare_bybit_amend_order(
                         order=order, is_queued=self.is_bid_amend_queued)
                     self._bid_update_count = 0
-        elif self._bybit_position != self._inventory_limit:
+        elif (self._bybit_position <=
+              self._inventory_limit - self._bybit_quote_size):
             self.place_new_bybit_order(side='Buy')
         if self._bybit_ask_ord_link_id is not None:
             order_local = self._bybit_active_orders.get(
@@ -231,5 +233,6 @@ class MMStrategy(Strategy):
                     self._gateway.prepare_bybit_amend_order(
                         order=order, is_queued=self.is_ask_amend_queued)
                     self._ask_update_count = 0
-        elif self._bybit_position != -self._inventory_limit:
+        elif (self._bybit_position >=
+              -self._inventory_limit + self._bybit_quote_size):
             self.place_new_bybit_order(side='Sell')
