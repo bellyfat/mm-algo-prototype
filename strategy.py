@@ -84,7 +84,8 @@ class MMStrategy(Strategy):
                     or order_status == 'PendingCancel'):
                 self._bybit_active_orders[ord_link_id] = order
             elif order_status == 'Rejected' or order_status == 'Filled':
-                self._bybit_active_orders.pop(ord_link_id)
+                if ord_link_id in self._bybit_active_orders:
+                    self._bybit_active_orders.pop(ord_link_id)
             elif order_status == 'Cancelled':
                 print('Cancelled')
                 if ord_link_id in self._bybit_active_orders:
