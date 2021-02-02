@@ -118,7 +118,7 @@ class MMStrategy(Strategy):
         size: int = result.get('size')
         side: str = result.get('side')
         self._bybit_position = (
-            size if side == 'Long' or side == 'None' else -size)
+            size if side == 'Buy' or side == 'None' else -size)
 
     def on_cancel_or_reject(self, order: dict) -> None:
         if self._bybit_bid_ord_link_id == order.get('order_link_id'):
