@@ -72,42 +72,15 @@ class BinanceWsClient(WsClient):
         super().__init__(sub_message=sub_message, feed_object=feed_object)
 
     async def start(self) -> None:
-        listen_key = (await self.call_listen_key()).get('listenKey')
-        asyncio.create_task(coro=self.listen_key_heartbeat())
-        await self.connect(uri='wss://dstream.binance.com/ws/' + listen_key)
+        await self.connect(uri='wss://dstream.binance.com/ws/')
 
     def on_disconnect(self) -> None:
         self._feed.on_book_reset()
-
-    async def call_listen_key(self) -> dict:
-        return await self.http_post(
-            uri=self._BASE_API_ENDPOINT + '/dapi/v1/listenKey',
-            data=self._api_auth.get_listen_key_data(),
-            headers=self._api_auth.headers)
-
-    async def listen_key_heartbeat(self) -> None:
-        while True:
-            await asyncio.sleep(delay=1800)
-            await self.call_listen_key()
 
     async def get_depth_snapshot(self) -> None:
         res = await self.http_get(
             uri=self._BASE_API_ENDPOINT + self._depth_snapshot_path)
         self._feed.on_depth_snapshot(data=res)
-
-    async def get_open_orders(self) -> None:
-        res = await self.http_get(
-            uri=self._BASE_API_ENDPOINT + self._api_auth.get_open_orders_auth(
-                symbol='BTCUSD_PERP'),
-            headers={'X-MBX-APIKEY': self._api_auth.key})
-        self._feed.on_order_snapshot(data=res)
-
-    async def get_positions(self) -> None:
-        res = await self.http_get(
-            uri=self._BASE_API_ENDPOINT + self._api_auth.get_position_risk_auth(
-                pair='BTCUSD'),
-            headers={'X-MBX-APIKEY': self._api_auth.key})
-        self._feed.on_position_snapshot(data=res)
 
     async def on_connect(self,
                          websocket: websockets.WebSocketClientProtocol) -> None:
@@ -117,8 +90,6 @@ class BinanceWsClient(WsClient):
                 self._feed.on_websocket(data=res)
                 if res.get('result') is None and res.get('id') == 1:
                     asyncio.create_task(coro=self.get_depth_snapshot())
-                    asyncio.create_task(coro=self.get_open_orders())
-                    asyncio.create_task(coro=self.get_positions())
             except websockets.ConnectionClosed as e:
                 print(e)
                 self.on_disconnect()
