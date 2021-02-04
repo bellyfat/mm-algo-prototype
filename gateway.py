@@ -38,14 +38,20 @@ class Gateway:
                     url='https://api.bybit.com/v2/private/order/create',
                     data=order, headers={'Content-Type': 'application/json'},
                     ssl=True) as res:
-                await res.json()
+                try:
+                    await res.json()
+                except aiohttp.ContentTypeError as e:
+                    print(e)
 
     async def send_binance_new_order(self, order: str) -> None:
         async with aiohttp.ClientSession() as session:
             async with session.post(
                     url='https://dapi.binance.com/dapi/v1/order', data=order,
                     headers=self._binance_auth.headers, ssl=True) as res:
-                await res.json()
+                try:
+                    await res.json()
+                except aiohttp.ContentTypeError as e:
+                    print(e)
 
     async def amend_bybit_order(self, order: str,
                                 is_queued: List[bool]) -> None:
@@ -54,14 +60,20 @@ class Gateway:
                     url='https://api.bybit.com/v2/private/order/replace',
                     data=order, headers={'Content-Type': 'application/json'},
                     ssl=True) as res:
-                res_bdy = await res.json()
-                is_queued[0] = False
-                if (res_bdy.get('rate_limit_status') == 0
-                        and not self.is_rate_limited):
-                    sleep_for = (res_bdy.get('rate_limit_reset_ms')
-                                 - api_auth.get_milli_timestamp()) / 1000.0
-                    if sleep_for > 0:
-                        self.is_rate_limited = True
-                        print(sleep_for)
-                        await asyncio.sleep(delay=sleep_for)
-                        self.is_rate_limited = False
+                try:
+                    res_bdy = await res.json()
+                    is_queued[0] = False
+                    if (res_bdy.get('rate_limit_status') == 0
+                            and not self.is_rate_limited):
+                        sleep_for = (res_bdy.get('rate_limit_reset_ms')
+                                     - api_auth.get_milli_timestamp()) / 1000.0
+                        if sleep_for > 0:
+                            self.is_rate_limited = True
+                            print(sleep_for)
+                            await asyncio.sleep(delay=sleep_for)
+                            self.is_rate_limited = False
+                except aiohttp.ContentTypeError as e:
+                    print(e)
+                    is_queued[0] = False
+
+
