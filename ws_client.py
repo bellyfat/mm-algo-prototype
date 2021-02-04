@@ -32,16 +32,16 @@ class WsClient:
     def on_disconnect(self) -> None:
         pass
 
-    async def connect(self, uri: str) -> None:
+    async def connect(self, uri: str, **kwargs) -> None:
         try:
-            async with websockets.connect(uri=uri,
-                                          ssl=self._ssl_context) as websocket:
-                try:
-                    await websocket.send(message=self._sub_message)
-                    await self.on_connect(websocket=websocket)
-                except websockets.ConnectionClosed as e:
-                    print(e)
-                    await self.start()
+            websocket = await websockets.connect(
+                uri=uri, ssl=self._ssl_context, **kwargs)
+            try:
+                await websocket.send(message=self._sub_message)
+                await self.on_connect(websocket=websocket)
+            except websockets.ConnectionClosed as e:
+                print(e)
+                await self.start()
         except websockets.InvalidHandshake as e:
             print(e)
             await self.start()
@@ -111,7 +111,9 @@ class BybitWsClient(WsClient):
         super().__init__(sub_message=sub_message, feed_object=feed_object)
 
     async def start(self) -> None:
-        await self.connect(uri=self._api_auth.get_websocket_uri())
+        print('START')
+        await self.connect(uri=self._api_auth.get_websocket_uri(),
+                           ping_interval=None)
 
     async def get_active_orders(self) -> None:
         res = await self.http_get(
@@ -127,7 +129,8 @@ class BybitWsClient(WsClient):
 
     async def on_connect(self,
                          websocket: websockets.WebSocketClientProtocol) -> None:
-        asyncio.create_task(coro=self.heartbeat(websocket=websocket))
+        heartbeat_t = asyncio.create_task(
+            coro=self.heartbeat(websocket=websocket))
         while True:
             try:
                 res = json.loads(s=await websocket.recv())
@@ -141,6 +144,7 @@ class BybitWsClient(WsClient):
                     self._pong_recv = True
             except websockets.ConnectionClosed as e:
                 print(e)
+                heartbeat_t.cancel()
                 await self.start()
 
     async def heartbeat(self,
@@ -152,6 +156,7 @@ class BybitWsClient(WsClient):
                 if not self._pong_recv:
                     await self.start()
                 else:
+                    print('PONG RECV')
                     self._pong_recv = False
             except websockets.ConnectionClosed as e:
                 print(e)
