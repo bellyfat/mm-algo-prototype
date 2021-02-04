@@ -55,7 +55,7 @@ class MMStrategy(Strategy):
     is_bid_amend_queued = [False]
     is_ask_amend_queued = [False]
     _inventory_limit = 1000
-    _UPDATE_INTERVAL = 2
+    _UPDATE_INTERVAL = 3
     _bid_update_count = 0
     _ask_update_count = 0
 
@@ -183,6 +183,7 @@ class MMStrategy(Strategy):
     def place_new_bybit_order(self, side: str) -> None:
         if not self._gateway.is_rate_limited:
             if side == 'Buy' and self._bybit_bid_ord_link_id is None:
+                print('Placed new buy limit')
                 self._bybit_bid_ord_link_id = get_random_string(n=36)
                 order = self.get_bybit_new_limit_order(
                     order_link_id=self._bybit_bid_ord_link_id,
@@ -190,6 +191,7 @@ class MMStrategy(Strategy):
                     qty=self.get_order_size(side='Buy'))
                 self._gateway.prepare_bybit_new_order(order=order)
             elif side == 'Sell' and self._bybit_ask_ord_link_id is None:
+                print('Placed new sell limit')
                 self._bybit_ask_ord_link_id = get_random_string(n=36)
                 order = self.get_bybit_new_limit_order(
                     order_link_id=self._bybit_ask_ord_link_id,
