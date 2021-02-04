@@ -183,7 +183,6 @@ class MMStrategy(Strategy):
     def place_new_bybit_order(self, side: str) -> None:
         if not self._gateway.is_rate_limited:
             if side == 'Buy' and self._bybit_bid_ord_link_id is None:
-                print('Place new order buy (Bybit)')
                 self._bybit_bid_ord_link_id = get_random_string(n=36)
                 order = self.get_bybit_new_limit_order(
                     order_link_id=self._bybit_bid_ord_link_id,
@@ -191,7 +190,6 @@ class MMStrategy(Strategy):
                     qty=self.get_order_size(side='Buy'))
                 self._gateway.prepare_bybit_new_order(order=order)
             elif side == 'Sell' and self._bybit_ask_ord_link_id is None:
-                print('Place new order sell (Bybit)')
                 self._bybit_ask_ord_link_id = get_random_string(n=36)
                 order = self.get_bybit_new_limit_order(
                     order_link_id=self._bybit_ask_ord_link_id,
@@ -229,7 +227,6 @@ class MMStrategy(Strategy):
                     and not self._gateway.is_rate_limited):
                 self._bid_update_count += 1
                 if self._bid_update_count == self._UPDATE_INTERVAL:
-                    print('Amend Buy', len(self._bybit_active_orders))
                     order_sz = self.get_order_size(side='Buy')
                     if order_local.get('size') != order_sz:
                         order = self.get_bybit_order_cancel_replace(
@@ -256,7 +253,6 @@ class MMStrategy(Strategy):
                     and not self._gateway.is_rate_limited):
                 self._ask_update_count += 1
                 if self._ask_update_count == self._UPDATE_INTERVAL:
-                    print('Amend Sell', len(self._bybit_active_orders))
                     order_sz = self.get_order_size(side='Sell')
                     if order_local.get('size') != order_sz:
                         order = self.get_bybit_order_cancel_replace(
