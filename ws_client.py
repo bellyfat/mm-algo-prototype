@@ -156,7 +156,6 @@ class BybitWsClient(WsClient):
                 if not self._pong_recv:
                     await self.start()
                 else:
-                    print('PONG RECV')
                     self._pong_recv = False
             except websockets.ConnectionClosed as e:
                 print(e)
