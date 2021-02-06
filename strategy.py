@@ -56,7 +56,7 @@ class MMStrategy(Strategy):
     is_bid_amend_queued = [False]
     is_ask_amend_queued = [False]
     _inventory_limit = 1000
-    _UPDATE_INTERVAL = 2
+    _UPDATE_INTERVAL = 3
     _bid_update_count = 0
     _ask_update_count = 0
 
