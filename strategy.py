@@ -58,6 +58,8 @@ class MMStrategy(Strategy):
     _bybit_symbol = 'BTCUSD'
     _binance_symbol = 'BTCUSD_PERP'
     _bybit_quote_size = 100
+    is_bid_new_order_queued = [False]
+    is_ask_new_order_queued = [False]
     is_bid_amend_queued = [False]
     is_ask_amend_queued = [False]
     _inventory_limit = 2500
@@ -203,7 +205,8 @@ class MMStrategy(Strategy):
 
     def place_new_bybit_order(self, side: str) -> None:
         if not self._gateway.is_rate_limited:
-            if side == 'Buy' and self._bybit_bid_ord_link_id is None:
+            if (side == 'Buy' and self._bybit_bid_ord_link_id is None
+                    and not self.is_bid_new_order_queued[0]):
                 order_size = self.get_order_size(side='Buy')
                 if order_size != 0:
                     print('Placed new buy limit')
@@ -212,8 +215,10 @@ class MMStrategy(Strategy):
                         order_link_id=self._bybit_bid_ord_link_id,
                         price=self._quote_targets[0], side=side,
                         qty=order_size)
-                    self._gateway.prepare_bybit_new_order(order=order)
-            elif side == 'Sell' and self._bybit_ask_ord_link_id is None:
+                    self._gateway.prepare_bybit_new_order(
+                        order=order, is_queued=self.is_bid_new_order_queued)
+            elif (side == 'Sell' and self._bybit_ask_ord_link_id is None
+                  and not self.is_ask_new_order_queued[0]):
                 order_size = self.get_order_size(side='Sell')
                 if order_size != 0:
                     print('Placed new sell limit')
@@ -222,7 +227,8 @@ class MMStrategy(Strategy):
                         order_link_id=self._bybit_ask_ord_link_id,
                         price=self._quote_targets[1], side=side,
                         qty=order_size)
-                    self._gateway.prepare_bybit_new_order(order=order)
+                    self._gateway.prepare_bybit_new_order(
+                        order=order, is_queued=self.is_ask_new_order_queued)
 
     def compute_quote_targets(self) -> None:
         average_price = np.mean(a=self._bybit_bbo + self._binance_bbo)

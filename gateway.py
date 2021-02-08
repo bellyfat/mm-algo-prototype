@@ -14,9 +14,12 @@ class Gateway:
         self._bybit_auth = api_auth.BybitApiAuth(file_path=api_pth_bybit)
         self._binance_auth = api_auth.BinanceApiAuth(file_path=api_pth_binance)
 
-    def prepare_bybit_new_order(self, order: OrderedDict) -> None:
+    def prepare_bybit_new_order(self, order: OrderedDict,
+                                is_queued: List[bool]) -> None:
+        is_queued[0] = True
         order_bdy_str = self._bybit_auth.get_order_auth_body(order=order)
-        asyncio.create_task(coro=self.send_bybit_new_order(order=order_bdy_str))
+        asyncio.create_task(coro=self.send_bybit_new_order(order=order_bdy_str,
+                                                           is_queued=is_queued))
 
     def prepare_binance_new_order(self, order: OrderedDict) -> None:
         order_bdy_str = self._binance_auth.get_order_auth_body(order=order)
@@ -42,7 +45,8 @@ class Gateway:
                 await asyncio.sleep(delay=sleep_for)
                 self.is_rate_limited = False
 
-    async def send_bybit_new_order(self, order: str) -> None:
+    async def send_bybit_new_order(self, order: str,
+                                   is_queued: List[bool]) -> None:
         async with aiohttp.ClientSession() as session:
             async with session.post(
                     url='https://api.bybit.com/v2/private/order/create',
@@ -50,10 +54,11 @@ class Gateway:
                     ssl=True) as res:
                 try:
                     res_bdy = await res.json()
-                    print(res_bdy)
                     await self.check_bybit_rate_limits(res_bdy=res_bdy)
                 except aiohttp.ContentTypeError as e:
                     print(e)
+                finally:
+                    is_queued[0] = False
 
     async def send_binance_new_order(self, order: str) -> None:
         async with aiohttp.ClientSession() as session:
@@ -74,10 +79,9 @@ class Gateway:
                     ssl=True) as res:
                 try:
                     res_bdy = await res.json()
-                    is_queued[0] = False
                     await self.check_bybit_rate_limits(res_bdy=res_bdy)
                 except aiohttp.ContentTypeError as e:
                     print(e)
+                finally:
                     is_queued[0] = False
-
 
