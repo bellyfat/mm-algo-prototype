@@ -55,8 +55,8 @@ class MMStrategy(Strategy):
     _bybit_quote_size = 100
     is_bid_amend_queued = [False]
     is_ask_amend_queued = [False]
-    _inventory_limit = 1000
-    _UPDATE_INTERVAL = 3
+    _inventory_limit = 2500
+    _UPDATE_INTERVAL = 4
     _bid_update_count = 0
     _ask_update_count = 0
 
