@@ -278,7 +278,8 @@ class MMStrategy(Strategy):
                         self._gateway.prepare_bybit_amend_order(
                             order=order, is_queued=self.is_bid_amend_queued)
                     self._bid_update_count = 0
-        elif self._bybit_position <= self._inventory_limit:
+        elif (self._bybit_position <=
+              self._inventory_limit - self._bybit_quote_size):
             self.place_new_bybit_order(side='Buy')
         if self._bybit_ask_ord_link_id is not None:
             order_local = self._bybit_active_orders.get(
@@ -305,5 +306,6 @@ class MMStrategy(Strategy):
                         self._gateway.prepare_bybit_amend_order(
                             order=order, is_queued=self.is_ask_amend_queued)
                     self._ask_update_count = 0
-        elif self._bybit_position >= -self._inventory_limit:
+        elif (self._bybit_position >=
+              -self._inventory_limit + self._bybit_quote_size):
             self.place_new_bybit_order(side='Sell')
