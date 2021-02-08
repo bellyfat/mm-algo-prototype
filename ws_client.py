@@ -7,6 +7,7 @@ import json
 import aiohttp
 from api_auth import BybitApiAuth, BinanceApiAuth
 import feed
+from typing import Coroutine
 
 
 class WsClient:
@@ -21,30 +22,30 @@ class WsClient:
         self._feed = feed_object
 
     @abstractmethod
-    async def start(self) -> None:
+    async def start(self) -> Coroutine:
         pass
 
     @abstractmethod
     async def on_connect(self,
-                         websocket: websockets.WebSocketClientProtocol) -> None:
+                         websocket: websockets.WebSocketClientProtocol) -> Coroutine:
         pass
 
     def on_disconnect(self) -> None:
         pass
 
-    async def connect(self, uri: str, **kwargs) -> None:
+    async def connect(self, uri: str, **kwargs) -> Coroutine:
         try:
             websocket = await websockets.connect(
                 uri=uri, ssl=self._ssl_context, **kwargs)
             try:
                 await websocket.send(message=self._sub_message)
-                await self.on_connect(websocket=websocket)
+                return await self.on_connect(websocket=websocket)
             except websockets.ConnectionClosed as e:
                 print(e)
-                await self.start()
+                return await self.start()
         except websockets.InvalidHandshake as e:
             print(e)
-            await self.start()
+            return await self.start()
 
     async def http_get(self, uri: str, **kwargs) -> dict:
         async with aiohttp.ClientSession() as session:
@@ -71,8 +72,8 @@ class BinanceWsClient(WsClient):
             obj={'method': 'SUBSCRIBE', 'params': ['btcusd_perp@depth@100ms']})
         super().__init__(sub_message=sub_message, feed_object=feed_object)
 
-    async def start(self) -> None:
-        await self.connect(uri='wss://dstream.binance.com/ws/')
+    async def start(self) -> Coroutine:
+        return await self.connect(uri='wss://dstream.binance.com/ws/')
 
     def on_disconnect(self) -> None:
         self._feed.on_book_reset()
@@ -83,7 +84,7 @@ class BinanceWsClient(WsClient):
         self._feed.on_depth_snapshot(data=res)
 
     async def on_connect(self,
-                         websocket: websockets.WebSocketClientProtocol) -> None:
+                         websocket: websockets.WebSocketClientProtocol) -> Coroutine:
         while True:
             try:
                 res = json.loads(s=await websocket.recv())
@@ -93,7 +94,7 @@ class BinanceWsClient(WsClient):
             except websockets.ConnectionClosed as e:
                 print(e)
                 self.on_disconnect()
-                await self.start()
+                return await self.start()
 
 
 class BybitWsClient(WsClient):
@@ -110,10 +111,9 @@ class BybitWsClient(WsClient):
                           'position']})
         super().__init__(sub_message=sub_message, feed_object=feed_object)
 
-    async def start(self) -> None:
-        print('START')
-        await self.connect(uri=self._api_auth.get_websocket_uri(),
-                           ping_interval=None)
+    async def start(self) -> Coroutine:
+        return await self.connect(uri=self._api_auth.get_websocket_uri(),
+                                  ping_interval=None)
 
     async def get_active_orders(self) -> None:
         res = await self.http_get(
@@ -128,7 +128,7 @@ class BybitWsClient(WsClient):
         self._feed.on_position_snapshot(data=res)
 
     async def on_connect(self,
-                         websocket: websockets.WebSocketClientProtocol) -> None:
+                         websocket: websockets.WebSocketClientProtocol) -> Coroutine:
         heartbeat_t = asyncio.create_task(
             coro=self.heartbeat(websocket=websocket))
         while True:
@@ -145,18 +145,18 @@ class BybitWsClient(WsClient):
             except websockets.ConnectionClosed as e:
                 print(e)
                 heartbeat_t.cancel()
-                await self.start()
+                return await self.start()
 
     async def heartbeat(self,
-                        websocket: websockets.WebSocketClientProtocol) -> None:
+                        websocket: websockets.WebSocketClientProtocol) -> Coroutine:
         while True:
             try:
                 await websocket.send(message=self._ping_msg)
                 await asyncio.sleep(delay=30)
                 if not self._pong_recv:
-                    await self.start()
+                    return await self.start()
                 else:
                     self._pong_recv = False
             except websockets.ConnectionClosed as e:
                 print(e)
-                await self.start()
+                return await self.start()
