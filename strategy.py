@@ -4,7 +4,7 @@ import numpy as np
 from collections import OrderedDict
 import random
 import string
-import gateway
+from gateway import Gateway
 
 
 def get_random_string(n):
@@ -36,20 +36,25 @@ class Strategy:
     def on_bybit_position_snap(self, data: dict) -> None:
         pass
 
+    @abstractmethod
+    def on_binance_position_snap(self, data: dict) -> None:
+        pass
+
 
 class MMStrategy(Strategy):
-    _gateway = gateway.Gateway
+    _gateway = Gateway
     _bybit_bbo = []
     _binance_bbo = []
     _bybit_active_orders = {}
     _bybit_bid_ord_link_id = None
     _bybit_ask_ord_link_id = None
-    _bybit_position = 0
+    _bybit_position = None
+    _binance_position = None
     _minimum_quotes = []
     _quote_targets = []
     _NET_FEE_OFFSET = 0.00015
     _NET_PROFIT_OFFSET = 0.00005
-    _VOL_MEASURE = 0.0004
+    _VOL_MEASURE = 0.0
     _bybit_symbol = 'BTCUSD'
     _binance_symbol = 'BTCUSD_PERP'
     _bybit_quote_size = 100
@@ -59,19 +64,23 @@ class MMStrategy(Strategy):
     _UPDATE_INTERVAL = 4
     _bid_update_count = 0
     _ask_update_count = 0
+    _bybit_unhedged_qty = 0
+    _qty_hedged = 0
 
-    def __init__(self, gateway: gateway.Gateway) -> None:
+    def __init__(self, gateway: Gateway) -> None:
         self._gateway = gateway
 
     def on_bybit_bbo_chg(self, data: Tuple[float, float]) -> None:
         self._bybit_bbo = list(data)
-        if len(self._binance_bbo) == 2:
+        if (len(self._binance_bbo) == 2 and self._bybit_position is not None
+                and self._binance_position is not None):
             self.compute_quote_targets()
             self.check_new_quotes()
 
     def on_binance_bbo_chg(self, data: Tuple[float, float]) -> None:
         self._binance_bbo = list(data)
-        if len(self._bybit_bbo) == 2:
+        if (len(self._binance_bbo) == 2 and self._bybit_position is not None
+                and self._binance_position is not None):
             self.compute_quote_targets()
             self.check_new_quotes()
 
@@ -120,6 +129,18 @@ class MMStrategy(Strategy):
         side: str = result.get('side')
         self._bybit_position = (
             size if side == 'Buy' or side == 'None' else -size)
+        if self._binance_position is not None:
+            self._bybit_unhedged_qty = (
+                    self._bybit_position + 100 * self._binance_position)
+
+    def on_binance_position_snap(self, data: dict) -> None:
+        amt = int(data.get('positionAmt'))
+        side: str = data.get('positionSide')
+        self._binance_position = (
+            amt if side == 'LONG' or side == 'BOTH' else -amt)
+        if self._bybit_position is not None:
+            self._bybit_unhedged_qty = (
+                    self._bybit_position + 100 * self._binance_position)
 
     def on_cancel_or_reject(self, ord_link_id: str) -> None:
         if self._bybit_bid_ord_link_id == ord_link_id:
@@ -127,34 +148,34 @@ class MMStrategy(Strategy):
         elif self._bybit_ask_ord_link_id == ord_link_id:
             self._bybit_ask_ord_link_id = None
 
-    @staticmethod
-    def get_hedge_qty(execution: dict) -> int:
-        order_qty: int = execution.get('order_qty')
-        exec_qty: int = execution.get('exec_qty')
-        leaves_qty: int = execution.get('leaves_qty')
-        pr_cum_qty = order_qty - leaves_qty - exec_qty
-        exact_hedge_qty = (exec_qty + pr_cum_qty % 100) / 100
-        return int(exact_hedge_qty - exact_hedge_qty % 1)
+    def check_hedge(self, exec_qty: int) -> None:
+        total_unhedged_qty = self._bybit_unhedged_qty + exec_qty
+        hedge_contracts = round(total_unhedged_qty / 100)
+        self._bybit_unhedged_qty = total_unhedged_qty - hedge_contracts * 100
+        if hedge_contracts != 0:
+            self.hedge_binance(contracts=hedge_contracts)
+
+    def hedge_binance(self, contracts: int) -> None:
+        if contracts > 0:
+            hedge_order = self.get_binance_new_market_order(side='SELL',
+                                                            qty=contracts)
+            self._gateway.prepare_binance_new_order(order=hedge_order)
+        elif contracts < 0:
+            hedge_order = self.get_binance_new_market_order(side='BUY',
+                                                            qty=abs(contracts))
+            self._gateway.prepare_binance_new_order(order=hedge_order)
 
     def on_buy_trade(self, execution: dict) -> None:
-        hedge_qty = self.get_hedge_qty(execution=execution)
-        if hedge_qty != 0:
-            hedge_order = self.get_binance_new_market_order(side='SELL',
-                                                            qty=hedge_qty)
-            self._gateway.prepare_binance_new_order(order=hedge_order)
-            if execution.get('leaves_qty') == 0:
-                self._bybit_bid_ord_link_id = None
-                print('FILLED BUY', self._bybit_position)
+        self.check_hedge(exec_qty=execution.get('exec_qty'))
+        if execution.get('leaves_qty') == 0:
+            self._bybit_bid_ord_link_id = None
+            print('FILLED BUY', self._bybit_position)
 
     def on_sell_trade(self, execution: dict) -> None:
-        hedge_qty = self.get_hedge_qty(execution=execution)
-        if hedge_qty != 0:
-            hedge_order = self.get_binance_new_market_order(side='BUY',
-                                                            qty=hedge_qty)
-            self._gateway.prepare_binance_new_order(order=hedge_order)
-            if execution.get('leaves_qty') == 0:
-                self._bybit_ask_ord_link_id = None
-                print('FILLED SELL', self._bybit_position)
+        self.check_hedge(exec_qty=-execution.get('exec_qty'))
+        if execution.get('leaves_qty') == 0:
+            self._bybit_ask_ord_link_id = None
+            print('FILLED SELL', self._bybit_position)
 
     def get_bybit_new_limit_order(self, order_link_id: str, price: float,
                                   qty: int, side: str) -> OrderedDict:
@@ -181,22 +202,28 @@ class MMStrategy(Strategy):
                                 'p_r_price': p_r_price_,
                                 'symbol': self._bybit_symbol})
 
-    def place_new_bybit_order(self, side: str, order_size: int) -> None:
+    def place_new_bybit_order(self, side: str) -> None:
         if not self._gateway.is_rate_limited:
             if side == 'Buy' and self._bybit_bid_ord_link_id is None:
-                print('Placed new buy limit')
-                self._bybit_bid_ord_link_id = get_random_string(n=36)
-                order = self.get_bybit_new_limit_order(
-                    order_link_id=self._bybit_bid_ord_link_id,
-                    price=self._quote_targets[0], side=side, qty=order_size)
-                self._gateway.prepare_bybit_new_order(order=order)
+                order_size = self.get_order_size(side='Buy')
+                if order_size != 0:
+                    print('Placed new buy limit')
+                    self._bybit_bid_ord_link_id = get_random_string(n=36)
+                    order = self.get_bybit_new_limit_order(
+                        order_link_id=self._bybit_bid_ord_link_id,
+                        price=self._quote_targets[0], side=side,
+                        qty=order_size)
+                    self._gateway.prepare_bybit_new_order(order=order)
             elif side == 'Sell' and self._bybit_ask_ord_link_id is None:
-                print('Placed new sell limit')
-                self._bybit_ask_ord_link_id = get_random_string(n=36)
-                order = self.get_bybit_new_limit_order(
-                    order_link_id=self._bybit_ask_ord_link_id,
-                    price=self._quote_targets[1], side=side, qty=order_size)
-                self._gateway.prepare_bybit_new_order(order=order)
+                order_size = self.get_order_size(side='Sell')
+                if order_size != 0:
+                    print('Placed new sell limit')
+                    self._bybit_ask_ord_link_id = get_random_string(n=36)
+                    order = self.get_bybit_new_limit_order(
+                        order_link_id=self._bybit_ask_ord_link_id,
+                        price=self._quote_targets[1], side=side,
+                        qty=order_size)
+                    self._gateway.prepare_bybit_new_order(order=order)
 
     def compute_quote_targets(self) -> None:
         average_price = np.mean(a=self._bybit_bbo + self._binance_bbo)
@@ -227,20 +254,42 @@ class MMStrategy(Strategy):
             # Adjust quoted offer to current Binance best bid
             self._quote_targets[1] = np.ceil(self._binance_bbo[0] * 2) / 2
 
-    def get_order_size(self, side: str,
-                       order_size: Union[int, None] = None) -> int:
-        if order_size is None:
-            order_size = self._bybit_quote_size
+    def get_order_size(self, side: str) -> int:
         if side == 'Buy':
             if self._bybit_position < 0:
                 return abs(self._bybit_position)
             else:
-                return order_size
+                if self._bybit_position % 100 == 0:
+                    if (self._bybit_position <= self._inventory_limit
+                            + self._bybit_quote_size):
+                        return self._bybit_quote_size
+                else:
+                    order_size = self._bybit_quote_size - (
+                            self._bybit_position % self._bybit_quote_size)
+                    if (self._bybit_position + order_size
+                            < self._inventory_limit):
+                        order_size += self._bybit_quote_size
+                    if (self._bybit_position + order_size
+                            <= self._inventory_limit):
+                        return order_size
         elif side == 'Sell':
             if self._bybit_position > 0:
                 return self._bybit_position
             else:
-                return order_size
+                if abs(self._bybit_position) % 100 == 0:
+                    if (self._bybit_position
+                            >= -self._inventory_limit + self._bybit_quote_size):
+                        return self._bybit_quote_size
+                else:
+                    order_size = self._bybit_quote_size - (
+                            abs(self._bybit_position) % self._bybit_quote_size)
+                    if (self._bybit_position - order_size
+                            > -self._inventory_limit):
+                        order_size += self._bybit_quote_size
+                    if (self._bybit_position - order_size
+                            >= -self._inventory_limit):
+                        return order_size
+        return 0
 
     def check_new_quotes(self) -> None:
         if self._bybit_bid_ord_link_id is not None:
@@ -251,9 +300,7 @@ class MMStrategy(Strategy):
                     and not self._gateway.is_rate_limited):
                 self._bid_update_count += 1
                 if self._bid_update_count == self._UPDATE_INTERVAL:
-                    ord_local_sz = order_local.get('size')
-                    new_order_sz = self.get_order_size(side='Buy',
-                                                       order_size=ord_local_sz)
+                    new_order_sz = self.get_order_size(side='Buy')
                     if order_local.get('size') != new_order_sz:
                         order = self.get_bybit_order_cancel_replace(
                             order_link_id=self._bybit_bid_ord_link_id,
@@ -269,19 +316,7 @@ class MMStrategy(Strategy):
                             order=order, is_queued=self.is_bid_amend_queued)
                     self._bid_update_count = 0
         else:
-            if self._bybit_position % self._bybit_quote_size == 0:
-                if (self._bybit_position <=
-                        self._inventory_limit + self._bybit_quote_size):
-                    self.place_new_bybit_order(
-                        side='Buy', order_size=self._bybit_quote_size)
-            else:
-                order_size = self._bybit_quote_size - (
-                        self._bybit_position % self._bybit_quote_size)
-                if self._bybit_position + order_size < self._inventory_limit:
-                    order_size += self._bybit_quote_size
-                if self._bybit_position + order_size <= self._inventory_limit:
-                    self.place_new_bybit_order(side='Buy',
-                                               order_size=order_size)
+            self.place_new_bybit_order(side='Buy')
         if self._bybit_ask_ord_link_id is not None:
             order_local = self._bybit_active_orders.get(
                 self._bybit_ask_ord_link_id)
@@ -290,10 +325,8 @@ class MMStrategy(Strategy):
                     and not self._gateway.is_rate_limited):
                 self._ask_update_count += 1
                 if self._ask_update_count == self._UPDATE_INTERVAL:
-                    ord_local_sz = order_local.get('size')
-                    new_order_sz = self.get_order_size(side='Sell',
-                                                       order_size=ord_local_sz)
-                    if ord_local_sz != new_order_sz:
+                    new_order_sz = self.get_order_size(side='Sell')
+                    if order_local.get('size') != new_order_sz:
                         order = self.get_bybit_order_cancel_replace(
                             order_link_id=self._bybit_ask_ord_link_id,
                             p_r_price_=str(self._quote_targets[1]),
@@ -308,17 +341,4 @@ class MMStrategy(Strategy):
                             order=order, is_queued=self.is_ask_amend_queued)
                     self._ask_update_count = 0
         else:
-            if self._bybit_position % self._bybit_quote_size == 0:
-                if (self._bybit_position >=
-                        -self._inventory_limit + self._bybit_quote_size):
-                    self.place_new_bybit_order(
-                        side='Sell', order_size=self._bybit_quote_size)
-            else:
-                order_size = self._bybit_quote_size - (
-                        self._bybit_position % self._bybit_quote_size)
-                if self._bybit_position - order_size > -self._inventory_limit:
-                    order_size += self._bybit_quote_size
-                if self._bybit_position - order_size >= -self._inventory_limit:
-                    self.place_new_bybit_order(side='Sell',
-                                               order_size=order_size)
-
+            self.place_new_bybit_order(side='Sell')

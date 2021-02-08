@@ -48,6 +48,12 @@ class BinanceApiAuth(ApiAuth):
         order['signature'] = self.get_signature(message=urlencode(query=order))
         return urlencode(query=order)
 
+    def get_position_risk_auth(self, pair: str) -> str:
+        params = {'pair': pair, 'timestamp': str(get_milli_timestamp())}
+        params['signature'] = self.get_signature(
+            message=urlencode(query=params))
+        return '/dapi/v1/positionRisk?' + urlencode(query=params)
+
 
 class BybitApiAuth(ApiAuth):
     def __init__(self, file_path: str) -> None:

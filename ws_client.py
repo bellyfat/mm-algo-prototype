@@ -83,14 +83,23 @@ class BinanceWsClient(WsClient):
             uri=self._BASE_API_ENDPOINT + self._depth_snapshot_path)
         self._feed.on_depth_snapshot(data=res)
 
+    async def get_positions(self) -> None:
+        res = await self.http_get(
+            uri=self._BASE_API_ENDPOINT + self._api_auth.get_position_risk_auth(
+                pair='BTCUSD'),
+            headers={'X-MBX-APIKEY': self._api_auth.key})
+        self._feed.on_position_snapshot(data=res)
+
     async def on_connect(self,
-                         websocket: websockets.WebSocketClientProtocol) -> Coroutine:
+                         websocket: websockets.WebSocketClientProtocol
+                         ) -> Coroutine:
         while True:
             try:
                 res = json.loads(s=await websocket.recv())
                 self._feed.on_websocket(data=res)
                 if res.get('result') is None and res.get('id') == 1:
                     asyncio.create_task(coro=self.get_depth_snapshot())
+                    asyncio.create_task(coro=self.get_positions())
             except websockets.ConnectionClosed as e:
                 print(e)
                 self.on_disconnect()
@@ -148,7 +157,8 @@ class BybitWsClient(WsClient):
                 return await self.start()
 
     async def heartbeat(self,
-                        websocket: websockets.WebSocketClientProtocol) -> Coroutine:
+                        websocket: websockets.WebSocketClientProtocol
+                        ) -> Coroutine:
         while True:
             try:
                 await websocket.send(message=self._ping_msg)

@@ -79,6 +79,11 @@ class BinanceFeed(Feed):
     def on_depth_snapshot(self, data: dict) -> None:
         self.handle_book_snapshot(data=data)
 
+    def on_position_snapshot(self, data: dict) -> None:
+        for pos in data:
+            if pos.get('symbol') == 'BTCUSD_PERP':
+                self._strategy.on_binance_position_snap(data=pos)
+
     def on_book_reset(self) -> None:
         self._order_book = None
 
