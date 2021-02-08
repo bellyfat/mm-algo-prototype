@@ -54,7 +54,7 @@ class MMStrategy(Strategy):
     _quote_targets = []
     _NET_FEE_OFFSET = 0.00015
     _NET_PROFIT_OFFSET = 0.00005
-    _VOL_MEASURE = 0.0
+    _VOL_MEASURE = 0.0003
     _bybit_symbol = 'BTCUSD'
     _binance_symbol = 'BTCUSD_PERP'
     _bybit_quote_size = 100
@@ -65,7 +65,6 @@ class MMStrategy(Strategy):
     _bid_update_count = 0
     _ask_update_count = 0
     _bybit_unhedged_qty = 0
-    _qty_hedged = 0
 
     def __init__(self, gateway: Gateway) -> None:
         self._gateway = gateway
@@ -104,18 +103,18 @@ class MMStrategy(Strategy):
 
     def on_bybit_execution(self, data: dict) -> None:
         execs = data.get('data')
-        for exec in execs:
-            exec_side = exec.get('side')
-            exec_qty = exec.get('exec_qty')
-            exec_type = exec.get('exec_type')
+        for execution in execs:
+            exec_side = execution.get('side')
+            exec_qty = execution.get('exec_qty')
+            exec_type = execution.get('exec_type')
             if exec_side == 'Buy':
                 self._bybit_position += exec_qty
                 if exec_type == 'Trade':
-                    self.on_buy_trade(execution=exec)
+                    self.on_buy_trade(execution=execution)
             elif exec_side == 'Sell':
                 self._bybit_position -= exec_qty
                 if exec_type == 'Trade':
-                    self.on_sell_trade(execution=exec)
+                    self.on_sell_trade(execution=execution)
 
     def on_bybit_order_snap(self, data: dict) -> None:
         self._bybit_active_orders = {}

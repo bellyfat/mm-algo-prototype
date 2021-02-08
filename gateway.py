@@ -50,6 +50,7 @@ class Gateway:
                     ssl=True) as res:
                 try:
                     res_bdy = await res.json()
+                    print(res_bdy)
                     await self.check_bybit_rate_limits(res_bdy=res_bdy)
                 except aiohttp.ContentTypeError as e:
                     print(e)
