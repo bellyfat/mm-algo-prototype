@@ -52,9 +52,10 @@ class MMStrategy(Strategy):
     _binance_position = None
     _minimum_quotes = []
     _quote_targets = []
+    _comb_price_list = []
     _NET_FEE_OFFSET = 0.00015
     _NET_PROFIT_OFFSET = 0.00005
-    _VOL_MEASURE = 0.0003
+    _VOL_MEASURE = 0.0004
     _bybit_symbol = 'BTCUSD'
     _binance_symbol = 'BTCUSD_PERP'
     _bybit_quote_size = 100
@@ -231,14 +232,24 @@ class MMStrategy(Strategy):
                         order=order, is_queued=self.is_ask_new_order_queued)
 
     def compute_quote_targets(self) -> None:
+        self._minimum_quotes.clear()
+        self._quote_targets.clear()
+        self._comb_price_list.clear()
         average_price = np.mean(a=self._bybit_bbo + self._binance_bbo)
-        self._minimum_quotes = [
+        self._minimum_quotes.append(
             np.floor((1 - self._NET_FEE_OFFSET - self._NET_PROFIT_OFFSET
-                      - self._VOL_MEASURE)
-                     * average_price * 2) / 2,
+                      - self._VOL_MEASURE) * average_price * 2) / 2)
+        self._minimum_quotes.append(
             np.ceil((1 + self._NET_FEE_OFFSET + self._NET_PROFIT_OFFSET
-                     + self._VOL_MEASURE)
-                    * average_price * 2) / 2]
+                     + self._VOL_MEASURE) * average_price * 2) / 2)
+        self._comb_price_list.extend(self._minimum_quotes)
+        self._comb_price_list.extend(self._bybit_bbo)
+        self._comb_price_list.append(np.floor(self._binance_bbo[0] * 2) / 2)
+        self._comb_price_list.append(np.ceil(self._binance_bbo[0] * 2) / 2)
+        self._quote_targets.append(min(self._comb_price_list))
+        self._quote_targets.append(max(self._comb_price_list))
+        """
+        # 38250.1/38250.2, 38050.0/38050.5
         self._quote_targets = self._minimum_quotes
         # Check if maximum bid is above current Bybit best bid
         if self._minimum_quotes[0] > self._bybit_bbo[0]:
@@ -257,7 +268,7 @@ class MMStrategy(Strategy):
         # (If we get lifted on the offer, we want to take the Binance bid)
         elif self._minimum_quotes[1] < self._binance_bbo[0]:
             # Adjust quoted offer to current Binance best bid
-            self._quote_targets[1] = np.ceil(self._binance_bbo[0] * 2) / 2
+            self._quote_targets[1] = np.ceil(self._binance_bbo[0] * 2) / 2"""
 
     def get_order_size(self, side: str) -> int:
         if side == 'Buy':
