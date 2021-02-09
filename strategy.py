@@ -277,34 +277,30 @@ class MMStrategy(Strategy):
             else:
                 rmd = self._bybit_position % self._bybit_quote_size
                 if rmd == 0:
-                    if (self._bybit_position <= self._inventory_limit
-                            + self._bybit_quote_size):
+                    if (self._bybit_position + self._bybit_quote_size
+                            <= self._inventory_limit):
                         return self._bybit_quote_size
                 else:
                     order_size = self._bybit_quote_size - rmd
                     if (self._bybit_position + order_size
-                            < self._inventory_limit):
+                            + self._bybit_quote_size <= self._inventory_limit):
                         order_size += self._bybit_quote_size
-                    if (self._bybit_position + order_size
-                            <= self._inventory_limit):
-                        return order_size
+                    return order_size
         elif side == 'Sell':
             if self._bybit_position > 0:
                 return self._bybit_position
             else:
                 rmd = abs(self._bybit_position) % self._bybit_quote_size
                 if rmd == 0:
-                    if (self._bybit_position
-                            >= -self._inventory_limit + self._bybit_quote_size):
+                    if (self._bybit_position - self._bybit_quote_size
+                            >= -self._inventory_limit):
                         return self._bybit_quote_size
                 else:
                     order_size = self._bybit_quote_size - rmd
                     if (self._bybit_position - order_size
-                            > -self._inventory_limit):
+                            - self._bybit_quote_size >= -self._inventory_limit):
                         order_size += self._bybit_quote_size
-                    if (self._bybit_position - order_size
-                            >= -self._inventory_limit):
-                        return order_size
+                    return order_size
         return 0
 
     def check_new_quotes(self) -> None:
