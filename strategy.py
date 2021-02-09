@@ -264,13 +264,13 @@ class MMStrategy(Strategy):
             if self._bybit_position < 0:
                 return abs(self._bybit_position)
             else:
-                if self._bybit_position % 100 == 0:
+                rmd = self._bybit_position % self._bybit_quote_size
+                if rmd == 0:
                     if (self._bybit_position <= self._inventory_limit
                             + self._bybit_quote_size):
                         return self._bybit_quote_size
                 else:
-                    order_size = self._bybit_quote_size - (
-                            self._bybit_position % self._bybit_quote_size)
+                    order_size = self._bybit_quote_size - rmd
                     if (self._bybit_position + order_size
                             < self._inventory_limit):
                         order_size += self._bybit_quote_size
@@ -281,13 +281,13 @@ class MMStrategy(Strategy):
             if self._bybit_position > 0:
                 return self._bybit_position
             else:
-                if abs(self._bybit_position) % 100 == 0:
+                rmd = abs(self._bybit_position) % self._bybit_quote_size
+                if rmd == 0:
                     if (self._bybit_position
                             >= -self._inventory_limit + self._bybit_quote_size):
                         return self._bybit_quote_size
                 else:
-                    order_size = self._bybit_quote_size - (
-                            abs(self._bybit_position) % self._bybit_quote_size)
+                    order_size = self._bybit_quote_size - rmd
                     if (self._bybit_position - order_size
                             > -self._inventory_limit):
                         order_size += self._bybit_quote_size
