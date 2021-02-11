@@ -53,14 +53,11 @@ class MMStrategy(Strategy):
     _quote_targets = []
     _NET_FEE_OFFSET = 0.00015
     _NET_PROFIT_OFFSET = 0
-    _VOL_MEASURE = 0
+    _VOL_MEASURE = 0.0004
     _bybit_symbol = 'BTCUSD'
     _binance_symbol = 'BTCUSD_PERP'
     _bybit_quote_size = 100
-    is_bid_new_order_queued = [False]
-    is_ask_new_order_queued = [False]
-    is_bid_amend_queued = [False]
-    is_ask_amend_queued = [False]
+    _is_order_op_queued = [False]
     _inventory_limit = 2500
     _UPDATE_INTERVAL = 4
     _bid_update_count = 0
@@ -205,7 +202,7 @@ class MMStrategy(Strategy):
     def place_new_bybit_order(self, side: str) -> None:
         if not self._gateway.is_rate_limited:
             if (side == 'Buy' and self._bybit_bid_ord_link_id is None
-                    and not self.is_bid_new_order_queued[0]):
+                    and not self._is_order_op_queued[0]):
                 order_size = self.get_order_size(side='Buy')
                 if order_size != 0:
                     print('Placed new buy limit')
@@ -215,9 +212,9 @@ class MMStrategy(Strategy):
                         price=self._quote_targets[0], side=side,
                         qty=order_size)
                     self._gateway.prepare_bybit_new_order(
-                        order=order, is_queued=self.is_bid_new_order_queued)
+                        order=order, is_queued=self._is_order_op_queued)
             elif (side == 'Sell' and self._bybit_ask_ord_link_id is None
-                  and not self.is_ask_new_order_queued[0]):
+                  and not self._is_order_op_queued[0]):
                 order_size = self.get_order_size(side='Sell')
                 if order_size != 0:
                     print('Placed new sell limit')
@@ -227,7 +224,7 @@ class MMStrategy(Strategy):
                         price=self._quote_targets[1], side=side,
                         qty=order_size)
                     self._gateway.prepare_bybit_new_order(
-                        order=order, is_queued=self.is_ask_new_order_queued)
+                        order=order, is_queued=self._is_order_op_queued)
 
     def compute_quote_targets(self) -> None:
         bybit_mid = np.mean(a=self._bybit_bbo)
@@ -289,7 +286,7 @@ class MMStrategy(Strategy):
         if self._bybit_bid_ord_link_id is not None:
             order_local = self._bybit_active_orders.get(
                 self._bybit_bid_ord_link_id)
-            if (order_local is not None and not self.is_bid_amend_queued[0]
+            if (order_local is not None and not self._is_order_op_queued[0]
                     and order_local.get('price') != self._quote_targets[0]
                     and not self._gateway.is_rate_limited):
                 self._bid_update_count += 1
@@ -301,20 +298,20 @@ class MMStrategy(Strategy):
                             p_r_price_=str(self._quote_targets[0]),
                             p_r_qty=new_order_sz)
                         self._gateway.prepare_bybit_amend_order(
-                            order=order, is_queued=self.is_bid_amend_queued)
+                            order=order, is_queued=self._is_order_op_queued)
                     else:
                         order = self.get_bybit_order_cancel_replace(
                             order_link_id=self._bybit_bid_ord_link_id,
                             p_r_price_=str(self._quote_targets[0]))
                         self._gateway.prepare_bybit_amend_order(
-                            order=order, is_queued=self.is_bid_amend_queued)
+                            order=order, is_queued=self._is_order_op_queued)
                     self._bid_update_count = 0
         else:
             self.place_new_bybit_order(side='Buy')
         if self._bybit_ask_ord_link_id is not None:
             order_local = self._bybit_active_orders.get(
                 self._bybit_ask_ord_link_id)
-            if (order_local is not None and not self.is_ask_amend_queued[0]
+            if (order_local is not None and not self._is_order_op_queued[0]
                     and order_local.get('price') != self._quote_targets[1]
                     and not self._gateway.is_rate_limited):
                 self._ask_update_count += 1
@@ -326,13 +323,13 @@ class MMStrategy(Strategy):
                             p_r_price_=str(self._quote_targets[1]),
                             p_r_qty=new_order_sz)
                         self._gateway.prepare_bybit_amend_order(
-                            order=order, is_queued=self.is_ask_amend_queued)
+                            order=order, is_queued=self._is_order_op_queued)
                     else:
                         order = self.get_bybit_order_cancel_replace(
                             order_link_id=self._bybit_ask_ord_link_id,
                             p_r_price_=str(self._quote_targets[1]))
                         self._gateway.prepare_bybit_amend_order(
-                            order=order, is_queued=self.is_ask_amend_queued)
+                            order=order, is_queued=self._is_order_op_queued)
                     self._ask_update_count = 0
         else:
             self.place_new_bybit_order(side='Sell')
