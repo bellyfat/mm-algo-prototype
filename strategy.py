@@ -239,13 +239,15 @@ class MMStrategy(Strategy):
             np.ceil((1 + self._NET_FEE_OFFSET + self._NET_PROFIT_OFFSET
                      + self._VOL_MEASURE) * overall_mid * 2) / 2]
         if bybit_mid < binance_mid:
-            if self._bybit_bbo[0] < minimum_quotes[0]:
-                minimum_quotes[0] = self._bybit_bbo[0]
+            max_bid = self._bybit_bbo[1] - 0.5
+            if max_bid < minimum_quotes[0]:
+                minimum_quotes[0] = max_bid
             if self._binance_bbo[1] > minimum_quotes[1]:
                 minimum_quotes[1] = np.ceil(self._binance_bbo[1] * 2) / 2
         elif bybit_mid > binance_mid:
-            if self._bybit_bbo[1] > minimum_quotes[1]:
-                minimum_quotes[1] = self._bybit_bbo[1]
+            min_ask = self._bybit_bbo[0] + 0.5
+            if min_ask > minimum_quotes[1]:
+                minimum_quotes[1] = min_ask
             if self._binance_bbo[0] < minimum_quotes[0]:
                 minimum_quotes[0] = np.floor(self._binance_bbo[0] * 2) / 2
         self._quote_targets = minimum_quotes
