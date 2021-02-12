@@ -240,7 +240,6 @@ class MMStrategy(Strategy):
                 else:
                     print('Sell order op queued')
 
-
     def compute_quote_targets(self) -> None:
         bybit_mid = np.mean(a=self._bybit_bbo)
         binance_mid = np.mean(a=self._binance_bbo)
@@ -266,7 +265,7 @@ class MMStrategy(Strategy):
 
     def get_order_size(self, side: str) -> int:
         if side == 'Buy':
-            if self._bybit_position <= 0:
+            if self._bybit_position < 0:
                 return abs(self._bybit_position)
             else:
                 rmd = self._bybit_position % self._bybit_quote_size
@@ -281,7 +280,7 @@ class MMStrategy(Strategy):
                         order_size += self._bybit_quote_size
                     return order_size
         elif side == 'Sell':
-            if self._bybit_position >= 0:
+            if self._bybit_position > 0:
                 return self._bybit_position
             else:
                 rmd = abs(self._bybit_position) % self._bybit_quote_size
