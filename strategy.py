@@ -53,7 +53,7 @@ class MMStrategy(Strategy):
     _quote_targets = []
     _NET_FEE_OFFSET = 0.00015
     _NET_PROFIT_OFFSET = 0.00005
-    _VOL_MEASURE = 0.0004
+    _RISK_MEASURE = 0.0001
     _bybit_symbol = 'BTCUSD'
     _binance_symbol = 'BTCUSD_PERP'
     _bybit_quote_size = 100
@@ -246,9 +246,9 @@ class MMStrategy(Strategy):
         overall_mid = np.mean(a=(bybit_mid, binance_mid))
         minimum_quotes = [
             np.floor((1 - self._NET_FEE_OFFSET - self._NET_PROFIT_OFFSET
-                      - self._VOL_MEASURE) * overall_mid * 2) / 2,
+                      - self._RISK_MEASURE) * overall_mid * 2) / 2,
             np.ceil((1 + self._NET_FEE_OFFSET + self._NET_PROFIT_OFFSET
-                     + self._VOL_MEASURE) * overall_mid * 2) / 2]
+                     + self._RISK_MEASURE) * overall_mid * 2) / 2]
         if bybit_mid < binance_mid:
             max_bid = self._bybit_bbo[1] - 0.5
             if max_bid < minimum_quotes[0]:
