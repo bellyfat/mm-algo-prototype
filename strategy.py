@@ -58,7 +58,7 @@ class MMStrategy(Strategy):
     _binance_symbol = 'BTCUSD_PERP'
     _bybit_quote_size = 100
     _is_order_op_queued = [False]
-    _inventory_limit = 2500
+    _inventory_limit = 50000
     _UPDATE_INTERVAL = 4
     _bid_update_count = 0
     _ask_update_count = 0
