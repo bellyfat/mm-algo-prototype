@@ -53,13 +53,13 @@ class MMStrategy(Strategy):
     _quote_targets = []
     _NET_FEE_OFFSET = 0.00015
     _NET_PROFIT_OFFSET = 0.00005
-    _RISK_MEASURE = 0.0001
+    _RISK_MEASURE = 0.00015
     _bybit_symbol = 'BTCUSD'
     _binance_symbol = 'BTCUSD_PERP'
     _bybit_quote_size = 100
     _is_order_op_queued = [False]
     _inventory_limit = 50000
-    _UPDATE_INTERVAL = 4
+    _UPDATE_INTERVAL = 3
     _bid_update_count = 0
     _ask_update_count = 0
     _bybit_unhedged_qty = 0
@@ -163,10 +163,12 @@ class MMStrategy(Strategy):
             hedge_order = self.get_binance_new_market_order(side='SELL',
                                                             qty=contracts)
             self._gateway.prepare_binance_new_order(order=hedge_order)
+            print('HEDGE SELL:', contracts)
         elif contracts < 0:
             hedge_order = self.get_binance_new_market_order(side='BUY',
                                                             qty=abs(contracts))
             self._gateway.prepare_binance_new_order(order=hedge_order)
+            print('HEDGE BUY:', abs(contracts))
 
     def on_buy_trade(self, execution: dict) -> None:
         self.check_hedge(exec_qty=execution.get('exec_qty'))

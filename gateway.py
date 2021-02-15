@@ -66,7 +66,8 @@ class Gateway:
                     url='https://dapi.binance.com/dapi/v1/order', data=order,
                     headers=self._binance_auth.headers, ssl=True) as res:
                 try:
-                    await res.json()
+                    resp = await res.json()
+                    print('Binance Response Status:', res.status)
                 except aiohttp.ContentTypeError as e:
                     print(e)
 
