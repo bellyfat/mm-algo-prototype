@@ -163,11 +163,13 @@ class MMStrategy(Strategy):
             hedge_order = self.get_binance_new_market_order(side='SELL',
                                                             qty=contracts)
             self._gateway.prepare_binance_new_order(order=hedge_order)
+            self._binance_position -= contracts
             print('HEDGE SELL:', contracts)
         elif contracts < 0:
             hedge_order = self.get_binance_new_market_order(side='BUY',
                                                             qty=abs(contracts))
             self._gateway.prepare_binance_new_order(order=hedge_order)
+            self._binance_position += abs(contracts)
             print('HEDGE BUY:', abs(contracts))
 
     def on_buy_trade(self, execution: dict) -> None:
