@@ -40,10 +40,10 @@ class WsClient:
             try:
                 await websocket.send(message=self._sub_message)
                 return await self.on_connect(websocket=websocket)
-            except websockets.ConnectionClosed as e:
+            except (websockets.ConnectionClosed, TimeoutError) as e:
                 print(e)
                 return await self.start()
-        except websockets.InvalidHandshake as e:
+        except (websockets.InvalidHandshake, TimeoutError) as e:
             print(e)
             return await self.start()
 
@@ -100,7 +100,7 @@ class BinanceWsClient(WsClient):
                 if res.get('result') is None and res.get('id') == 1:
                     asyncio.create_task(coro=self.get_depth_snapshot())
                     asyncio.create_task(coro=self.get_positions())
-            except websockets.ConnectionClosed as e:
+            except (websockets.ConnectionClosed, TimeoutError) as e:
                 print(e)
                 self.on_disconnect()
                 return await self.start()
@@ -151,7 +151,7 @@ class BybitWsClient(WsClient):
                     asyncio.create_task(coro=self.get_positions())
                 elif res.get('ret_msg') == 'pong' and res.get('success'):
                     self._pong_recv = True
-            except websockets.ConnectionClosed as e:
+            except (websockets.ConnectionClosed, TimeoutError) as e:
                 print(e)
                 heartbeat_t.cancel()
                 return await self.start()
@@ -167,6 +167,6 @@ class BybitWsClient(WsClient):
                     return await self.start()
                 else:
                     self._pong_recv = False
-            except websockets.ConnectionClosed as e:
+            except (websockets.ConnectionClosed, TimeoutError) as e:
                 print(e)
                 return await self.start()
