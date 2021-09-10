@@ -7,6 +7,7 @@ import json
 import aiohttp
 from api_auth import BybitApiAuth, BinanceApiAuth
 import feed
+from typing import Coroutine
 
 
 class WsClient:
@@ -21,29 +22,30 @@ class WsClient:
         self._feed = feed_object
 
     @abstractmethod
-    async def start(self) -> None:
+    async def start(self) -> Coroutine:
         pass
 
     @abstractmethod
     async def on_connect(self,
-                         websocket: websockets.WebSocketClientProtocol) -> None:
+                         websocket: websockets.WebSocketClientProtocol) -> Coroutine:
         pass
 
     def on_disconnect(self) -> None:
         pass
 
-    async def connect(self, uri: str) -> None:
+    async def connect(self, uri: str, **kwargs) -> Coroutine:
         try:
-            async with websockets.connect(uri=uri,
-                                          ssl=self._ssl_context) as websocket:
-                try:
-                    await websocket.send(message=self._sub_message)
-                    await self.on_connect(websocket=websocket)
-                except:
-                    self.on_disconnect()
-                    await self.start()
-        except websockets.InvalidHandshake:
-            await self.start()
+            websocket = await websockets.connect(
+                uri=uri, ssl=self._ssl_context, **kwargs)
+            try:
+                await websocket.send(message=self._sub_message)
+                return await self.on_connect(websocket=websocket)
+            except (websockets.ConnectionClosed, TimeoutError) as e:
+                print(e)
+                return await self.start()
+        except (websockets.InvalidHandshake, TimeoutError) as e:
+            print(e)
+            return await self.start()
 
     async def http_get(self, uri: str, **kwargs) -> dict:
         async with aiohttp.ClientSession() as session:
@@ -70,36 +72,16 @@ class BinanceWsClient(WsClient):
             obj={'method': 'SUBSCRIBE', 'params': ['btcusd_perp@depth@100ms']})
         super().__init__(sub_message=sub_message, feed_object=feed_object)
 
-    async def start(self) -> None:
-        listen_key = (await self.call_listen_key()).get('listenKey')
-        asyncio.create_task(coro=self.listen_key_heartbeat())
-        await self.connect(uri='wss://dstream.binance.com/ws/' + listen_key)
+    async def start(self) -> Coroutine:
+        return await self.connect(uri='wss://dstream.binance.com/ws/')
 
     def on_disconnect(self) -> None:
         self._feed.on_book_reset()
-
-    async def call_listen_key(self) -> dict:
-        return await self.http_post(
-            uri=self._BASE_API_ENDPOINT + '/dapi/v1/listenKey',
-            data=self._api_auth.get_listen_key_data(),
-            headers=self._api_auth.headers)
-
-    async def listen_key_heartbeat(self) -> None:
-        while True:
-            await asyncio.sleep(delay=1800)
-            await self.call_listen_key()
 
     async def get_depth_snapshot(self) -> None:
         res = await self.http_get(
             uri=self._BASE_API_ENDPOINT + self._depth_snapshot_path)
         self._feed.on_depth_snapshot(data=res)
-
-    async def get_open_orders(self) -> None:
-        res = await self.http_get(
-            uri=self._BASE_API_ENDPOINT + self._api_auth.get_open_orders_auth(
-                symbol='BTCUSD_PERP'),
-            headers={'X-MBX-APIKEY': self._api_auth.key})
-        self._feed.on_order_snapshot(data=res)
 
     async def get_positions(self) -> None:
         res = await self.http_get(
@@ -109,14 +91,19 @@ class BinanceWsClient(WsClient):
         self._feed.on_position_snapshot(data=res)
 
     async def on_connect(self,
-                         websocket: websockets.WebSocketClientProtocol) -> None:
+                         websocket: websockets.WebSocketClientProtocol
+                         ) -> Coroutine:
         while True:
-            res = json.loads(s=await websocket.recv())
-            self._feed.on_websocket(data=res)
-            if res.get('result') is None and res.get('id') == 1:
-                asyncio.create_task(coro=self.get_depth_snapshot())
-                asyncio.create_task(coro=self.get_open_orders())
-                asyncio.create_task(coro=self.get_positions())
+            try:
+                res = json.loads(s=await websocket.recv())
+                self._feed.on_websocket(data=res)
+                if res.get('result') is None and res.get('id') == 1:
+                    asyncio.create_task(coro=self.get_depth_snapshot())
+                    asyncio.create_task(coro=self.get_positions())
+            except (websockets.ConnectionClosed, TimeoutError) as e:
+                print(e)
+                self.on_disconnect()
+                return await self.start()
 
 
 class BybitWsClient(WsClient):
@@ -133,8 +120,9 @@ class BybitWsClient(WsClient):
                           'position']})
         super().__init__(sub_message=sub_message, feed_object=feed_object)
 
-    async def start(self) -> None:
-        await self.connect(uri=self._api_auth.get_websocket_uri())
+    async def start(self) -> Coroutine:
+        return await self.connect(uri=self._api_auth.get_websocket_uri(),
+                                  ping_interval=None)
 
     async def get_active_orders(self) -> None:
         res = await self.http_get(
@@ -149,28 +137,36 @@ class BybitWsClient(WsClient):
         self._feed.on_position_snapshot(data=res)
 
     async def on_connect(self,
-                         websocket: websockets.WebSocketClientProtocol) -> None:
-        asyncio.create_task(coro=self.heartbeat(websocket=websocket))
+                         websocket: websockets.WebSocketClientProtocol) -> Coroutine:
+        heartbeat_t = asyncio.create_task(
+            coro=self.heartbeat(websocket=websocket))
         while True:
-            res = json.loads(s=await websocket.recv())
-            if res.get('topic') is not None:
-                self._feed.on_websocket(data=res)
-            elif (res.get('request').get('op') == 'subscribe'
-                  and res.get('success') is True):
-                asyncio.create_task(coro=self.get_active_orders())
-                asyncio.create_task(coro=self.get_positions())
-            elif res.get('ret_msg') == 'pong' and res.get('success'):
-                self._pong_recv = True
+            try:
+                res = json.loads(s=await websocket.recv())
+                if res.get('topic') is not None:
+                    self._feed.on_websocket(data=res)
+                elif (res.get('request').get('op') == 'subscribe'
+                      and res.get('success') is True):
+                    asyncio.create_task(coro=self.get_active_orders())
+                    asyncio.create_task(coro=self.get_positions())
+                elif res.get('ret_msg') == 'pong' and res.get('success'):
+                    self._pong_recv = True
+            except (websockets.ConnectionClosed, TimeoutError) as e:
+                print(e)
+                heartbeat_t.cancel()
+                return await self.start()
 
     async def heartbeat(self,
-                        websocket: websockets.WebSocketClientProtocol) -> None:
+                        websocket: websockets.WebSocketClientProtocol
+                        ) -> Coroutine:
         while True:
             try:
                 await websocket.send(message=self._ping_msg)
-            except:
-                await self.start()
-            await asyncio.sleep(delay=30)
-            if not self._pong_recv:
-                await self.start()
-            else:
-                self._pong_recv = False
+                await asyncio.sleep(delay=30)
+                if not self._pong_recv:
+                    return await self.start()
+                else:
+                    self._pong_recv = False
+            except (websockets.ConnectionClosed, TimeoutError) as e:
+                print(e)
+                return await self.start()

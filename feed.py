@@ -15,11 +15,9 @@ class Feed:
     def on_websocket(self, data: dict) -> None:
         pass
 
-    @abstractmethod
     def on_order_snapshot(self, data: dict) -> None:
         pass
 
-    @abstractmethod
     def on_position_snapshot(self, data: dict) -> None:
         pass
 
@@ -77,24 +75,15 @@ class BinanceFeed(Feed):
     def on_websocket(self, data: dict) -> None:
         if data.get('e') == 'depthUpdate':
             self.handle_book_delta(data=data)
-        elif data.get('e') == 'ACCOUNT_UPDATE':
-            pass
-            #self._strategy.on_binance_account_update(data=data.get('a'))
-        elif data.get('e') == 'ORDER_TRADE_UPDATE':
-            pass
-            #self._strategy.on_binance_order_trade_update(data=data.get('o'))
-
-    def on_order_snapshot(self, data: dict) -> None:
-        pass
-        #self._strategy.on_binance_order_snap(data=data)
-
-    def on_position_snapshot(self, data: dict) -> None:
-        for pos in data:
-            if pos.get('symbol') == 'BTCUSD_PERP':
-                break
 
     def on_depth_snapshot(self, data: dict) -> None:
         self.handle_book_snapshot(data=data)
+
+    def on_position_snapshot(self, data: list) -> None:
+        for pos in data:
+            if pos.get('symbol') == 'BTCUSD_PERP':
+                self._strategy.on_binance_position_snap(data=pos)
+                break
 
     def on_book_reset(self) -> None:
         self._order_book = None

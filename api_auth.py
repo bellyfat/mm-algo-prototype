@@ -43,28 +43,16 @@ class BinanceApiAuth(ApiAuth):
         self.headers = {'Content-Type': 'application/x-www-form-urlencoded',
                         'X-MBX-APIKEY': self.key}
 
-    def get_listen_key_data(self) -> str:
-        params = {'timestamp': str(get_milli_timestamp())}
-        params['signature'] = self.get_signature(
-            message=urlencode(query=params))
-        return urlencode(query=params)
-
-    def get_open_orders_auth(self, symbol: str) -> str:
-        params = {'symbol': symbol, 'timestamp': str(get_milli_timestamp())}
-        params['signature'] = self.get_signature(
-            message=urlencode(query=params))
-        return '/dapi/v1/openOrders?' + urlencode(query=params)
+    def get_order_auth_body(self, order: OrderedDict) -> str:
+        order['timestamp'] = get_milli_timestamp()
+        order['signature'] = self.get_signature(message=urlencode(query=order))
+        return urlencode(query=order)
 
     def get_position_risk_auth(self, pair: str) -> str:
         params = {'pair': pair, 'timestamp': str(get_milli_timestamp())}
         params['signature'] = self.get_signature(
             message=urlencode(query=params))
         return '/dapi/v1/positionRisk?' + urlencode(query=params)
-
-    def get_order_auth_body(self, order: OrderedDict) -> str:
-        order['timestamp'] = get_milli_timestamp()
-        order['signature'] = self.get_signature(message=urlencode(query=order))
-        return urlencode(query=order)
 
 
 class BybitApiAuth(ApiAuth):
