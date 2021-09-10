@@ -91,4 +91,3 @@ class Gateway:
                     print(e)
                 finally:
                     is_queued[0] = False
-
